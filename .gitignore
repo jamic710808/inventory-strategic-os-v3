@@ -1,0 +1,30 @@
+# 庫存分析 V3 Git 忽略檔案
+
+# V1/V2 歷史版本（只保留 V3）
+Inventory_Strategic_OS.html
+Inventory_Strategic_OS_V2.html
+V1_*.md
+V2_*.md
+
+# 除錯與開發過程檔案
+v3_debug/
+v3_parts/part_*.txt
+!v3_parts/part_js.txt
+
+# V1/V2 建置腳本
+build_v2*.py
+generate_sample_data.py
+generate_sample_data_v1_v2.py
+
+# 其他非必要檔案
+*.pdf
+*.png
+*.docx
+*.txt
+mind-*.png
+pdf_content_*.txt
+docx_content.txt
+
+# 系統檔案
+.DS_Store
+Thumbs.db

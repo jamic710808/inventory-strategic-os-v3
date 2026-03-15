@@ -1,0 +1,4341 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>庫存分析智能儀表板 V3.0</title>
+
+  <!-- CDN Scripts -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    /* ============================================================
+       基礎 / 深色模式
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #020617 100%);
+      background-attachment: fixed;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    /* ============================================================
+       淺色模式
+    ============================================================ */
+    body.light-mode {
+      background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f8fafc 100%);
+      background-attachment: fixed;
+      color: #1e293b;
+    }
+    body.light-mode .glass-panel {
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid rgba(100, 116, 139, 0.2);
+    }
+    body.light-mode .glass-header {
+      background: rgba(241, 245, 249, 0.85);
+      border-bottom: 1px solid rgba(100, 116, 139, 0.2);
+    }
+    body.light-mode .glass-btn {
+      background: rgba(59, 130, 246, 0.12);
+      color: #1e40af;
+      border-color: rgba(59, 130, 246, 0.25);
+    }
+    body.light-mode .glass-btn.active {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #ffffff;
+    }
+    body.light-mode .kpi-card {
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(100, 116, 139, 0.15);
+    }
+    body.light-mode .data-table th {
+      background: rgba(241, 245, 249, 0.9);
+      color: #475569;
+    }
+    body.light-mode .data-table td {
+      border-color: rgba(100, 116, 139, 0.15);
+    }
+    body.light-mode .tab-sub-btn {
+      background: rgba(59, 130, 246, 0.1);
+      color: #1e40af;
+    }
+    body.light-mode .tab-sub-btn.active {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: #ffffff;
+    }
+    body.light-mode input[type="range"] { accent-color: #3b82f6; }
+    body.light-mode input[type="number"],
+    body.light-mode input[type="text"],
+    body.light-mode select {
+      background: rgba(255, 255, 255, 0.9);
+      color: #1e293b;
+      border-color: rgba(100, 116, 139, 0.3);
+    }
+    body.light-mode .accordion-header {
+      background: rgba(241, 245, 249, 0.8);
+      color: #1e293b;
+    }
+    body.light-mode .accordion-body {
+      background: rgba(255, 255, 255, 0.7);
+      color: #334155;
+    }
+    body.light-mode .heatmap-cell { color: #0f172a; }
+    body.light-mode ::-webkit-scrollbar-track { background: #e2e8f0; }
+    body.light-mode ::-webkit-scrollbar-thumb { background: #94a3b8; }
+
+    /* ============================================================
+       Glass UI
+    ============================================================ */
+    .glass-panel {
+      background: rgba(30, 41, 59, 0.4);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 1rem;
+    }
+    .glass-header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(59, 130, 246, 0.15);
+      color: #93c5fd;
+      transition: background 0.2s, color 0.2s, transform 0.15s;
+      white-space: nowrap;
+    }
+    .glass-btn:hover { background: rgba(59, 130, 246, 0.28); color: #bfdbfe; }
+    .glass-btn.active {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: #ffffff;
+      border-color: transparent;
+    }
+
+    /* ============================================================
+       Tab 系統
+    ============================================================ */
+    .tab-content { display: none; }
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* 子分頁按鈕 */
+    .tab-sub-btn {
+      padding: 0.3rem 0.9rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.08);
+      color: #94a3b8;
+      transition: background 0.2s, color 0.2s;
+    }
+    .tab-sub-btn.active {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: #ffffff;
+      border-color: transparent;
+    }
+
+    /* ============================================================
+       KPI Cards
+    ============================================================ */
+    .kpi-card {
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 0.875rem;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .kpi-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 32px rgba(59, 130, 246, 0.18);
+    }
+    .kpi-label { font-size: 0.7rem; letter-spacing: 0.06em; color: #94a3b8; text-transform: uppercase; }
+    .kpi-value { font-size: 1.75rem; font-weight: 700; line-height: 1.1; }
+    .kpi-unit  { font-size: 0.7rem; color: #64748b; }
+    .kpi-trend { font-size: 0.72rem; font-weight: 500; }
+
+    /* ============================================================
+       Charts
+    ============================================================ */
+    .chart-container {
+      position: relative;
+      height: 320px;
+      width: 100%;
+    }
+    .chart-container-sm { position: relative; height: 220px; width: 100%; }
+    .chart-container-lg { position: relative; height: 420px; width: 100%; }
+
+    /* ============================================================
+       Tables
+    ============================================================ */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .data-table th {
+      background: rgba(15, 23, 42, 0.6);
+      color: #94a3b8;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 0.6rem 0.8rem;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      white-space: nowrap;
+    }
+    .data-table td {
+      padding: 0.55rem 0.8rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      vertical-align: middle;
+    }
+    .data-table tbody tr:hover { background: rgba(59, 130, 246, 0.08); }
+    .table-wrapper { overflow-x: auto; border-radius: 0.75rem; }
+
+    /* ============================================================
+       Badges
+    ============================================================ */
+    .badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 0.15rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+    .badge-a  { background: rgba(59,130,246,0.25); color: #60a5fa; border: 1px solid rgba(59,130,246,0.4); }
+    .badge-b  { background: rgba(245,158,11,0.25); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); }
+    .badge-c  { background: rgba(100,116,139,0.25); color: #94a3b8; border: 1px solid rgba(100,116,139,0.4); }
+    .badge-x  { background: rgba(16,185,129,0.25); color: #34d399; border: 1px solid rgba(16,185,129,0.4); }
+    .badge-y  { background: rgba(234,179,8,0.25);  color: #facc15; border: 1px solid rgba(234,179,8,0.4); }
+    .badge-z  { background: rgba(239,68,68,0.25);  color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
+    .badge-ax { background: rgba(59,130,246,0.35); color: #93c5fd; border: 1px solid rgba(59,130,246,0.5); }
+
+    /* ============================================================
+       Progress Bars
+    ============================================================ */
+    .progress-bar {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 9999px;
+      overflow: hidden;
+      margin-top: 0.35rem;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, #3b82f6, #06b6d4);
+      transition: width 0.6s ease;
+    }
+    .progress-fill.warning { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+    .progress-fill.success { background: linear-gradient(90deg, #10b981, #06b6d4); }
+
+    /* ============================================================
+       Alert Colours
+    ============================================================ */
+    .alert-green  { color: #34d399; }
+    .alert-yellow { color: #facc15; }
+    .alert-red    { color: #f87171; }
+
+    .alert-card {
+      border-radius: 0.75rem;
+      padding: 0.85rem 1rem;
+      border-left: 4px solid;
+      margin-bottom: 0.6rem;
+    }
+    .alert-card.sev-high   { border-color: #ef4444; background: rgba(239,68,68,0.08); }
+    .alert-card.sev-medium { border-color: #f59e0b; background: rgba(245,158,11,0.08); }
+    .alert-card.sev-low    { border-color: #3b82f6; background: rgba(59,130,246,0.08); }
+
+    /* ============================================================
+       Heatmap
+    ============================================================ */
+    .heatmap-cell {
+      text-align: center;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.45rem 0.3rem;
+      border-radius: 0.25rem;
+      color: #fff;
+      transition: opacity 0.2s;
+    }
+    .heatmap-cell:hover { opacity: 0.8; }
+
+    /* ============================================================
+       ABC-XYZ Matrix
+    ============================================================ */
+    .abcxyz-cell {
+      border-radius: 0.5rem;
+      padding: 0.6rem;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      min-height: 5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.2rem;
+    }
+    .abcxyz-cell:hover { transform: scale(1.04); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+    .abcxyz-cell .cell-label { font-size: 1rem; font-weight: 800; }
+    .abcxyz-cell .cell-count { font-size: 0.65rem; color: rgba(255,255,255,0.75); }
+
+    /* Colour map for 9 cells */
+    .cell-ax { background: linear-gradient(135deg, #1d4ed8, #2563eb); }
+    .cell-ay { background: linear-gradient(135deg, #1e40af, #3b82f6); }
+    .cell-az { background: linear-gradient(135deg, #7c3aed, #8b5cf6); }
+    .cell-bx { background: linear-gradient(135deg, #065f46, #059669); }
+    .cell-by { background: linear-gradient(135deg, #d97706, #f59e0b); }
+    .cell-bz { background: linear-gradient(135deg, #9a3412, #ea580c); }
+    .cell-cx { background: linear-gradient(135deg, #0e7490, #06b6d4); }
+    .cell-cy { background: linear-gradient(135deg, #374151, #6b7280); }
+    .cell-cz { background: linear-gradient(135deg, #7f1d1d, #ef4444); }
+
+    /* ============================================================
+       Drop Zone
+    ============================================================ */
+    #drop-zone {
+      border: 2px dashed rgba(99, 102, 241, 0.45);
+      border-radius: 1rem;
+      padding: 2.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    #drop-zone.drag-over {
+      border-color: #6366f1;
+      background: rgba(99, 102, 241, 0.08);
+    }
+    #drop-zone:hover { border-color: rgba(99, 102, 241, 0.7); }
+
+    /* ============================================================
+       Accordion (DAX)
+    ============================================================ */
+    .accordion-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: rgba(30, 41, 59, 0.6);
+      border-radius: 0.5rem;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #93c5fd;
+      user-select: none;
+      transition: background 0.2s;
+    }
+    .accordion-header:hover { background: rgba(59, 130, 246, 0.15); }
+    .accordion-body {
+      display: none;
+      padding: 0.85rem 1rem;
+      background: rgba(15, 23, 42, 0.4);
+      border-radius: 0 0 0.5rem 0.5rem;
+      font-size: 0.78rem;
+    }
+    .accordion-body.open { display: block; animation: fadeIn 0.2s ease; }
+    .accordion-body pre {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 0.4rem;
+      padding: 0.75rem;
+      overflow-x: auto;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 0.72rem;
+      line-height: 1.6;
+      color: #a5f3fc;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* ============================================================
+       Form Controls
+    ============================================================ */
+    input[type="range"] {
+      width: 100%;
+      accent-color: #6366f1;
+      cursor: pointer;
+    }
+    input[type="number"],
+    input[type="text"],
+    select {
+      background: rgba(30, 41, 59, 0.6);
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 0.5rem;
+      padding: 0.4rem 0.7rem;
+      font-size: 0.8rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="number"]:focus,
+    input[type="text"]:focus,
+    select:focus { border-color: #6366f1; }
+
+    /* ============================================================
+       Gauge (Quality Score)
+    ============================================================ */
+    .gauge-wrap { position: relative; width: 140px; height: 80px; margin: 0 auto; }
+    .gauge-svg { width: 140px; height: 80px; }
+    .gauge-text {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      text-align: center;
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+
+    /* ============================================================
+       Scrollbar
+    ============================================================ */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.5); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.8); }
+
+    /* ============================================================
+       Export Mode (PDF — no backdrop-filter)
+    ============================================================ */
+    .export-mode .glass-panel {
+      background: #1e293b !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    .export-mode.light-mode .glass-panel { background: #ffffff !important; }
+
+    /* ============================================================
+       Utility helpers
+    ============================================================ */
+    .text-muted  { color: #64748b; }
+    .text-accent { color: #6366f1; }
+    .divider { border-top: 1px solid rgba(255,255,255,0.07); margin: 1rem 0; }
+    .section-title {
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 0.75rem;
+    }
+
+    /* ============================================================
+       Responsive
+    ============================================================ */
+    @media (max-width: 1024px) {
+      .nav-scroll { overflow-x: auto; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+    @media (max-width: 640px) {
+      .kpi-grid { grid-template-columns: 1fr !important; }
+      .chart-container { height: 240px; }
+    }
+
+    /* ── Global Filter Bar ── */
+    #global-filter-bar { transition: opacity .2s; }
+    .filter-group { position: relative; }
+    .filter-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      background: rgba(99,102,241,.15);
+      border: 1px solid rgba(99,102,241,.3);
+      border-radius: 8px; color: #a5b4fc;
+      font-size: .8rem; cursor: pointer; white-space: nowrap;
+      transition: background .15s;
+    }
+    .filter-pill:hover, .filter-pill.active-filter {
+      background: rgba(99,102,241,.3); color: #e0e7ff;
+    }
+    .filter-dropdown {
+      position: absolute; top: calc(100% + 6px); left: 0; z-index: 300;
+      min-width: 160px;
+      background: #1e293b; border: 1px solid rgba(99,102,241,.35);
+      border-radius: 10px; padding: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    }
+    .filter-dropdown label {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 8px; border-radius: 6px;
+      font-size: .8rem; color: #cbd5e1; cursor: pointer;
+      transition: background .1s;
+    }
+    .filter-dropdown label:hover { background: rgba(99,102,241,.15); }
+    .filter-dropdown input[type="checkbox"] { accent-color: #6366f1; width: 14px; height: 14px; }
+    .filter-search-wrap {
+      display: flex; align-items: center; gap: 8px;
+      flex: 1; min-width: 180px; max-width: 280px;
+      border-bottom: 1px solid rgba(99,102,241,.3); padding-bottom: 2px;
+    }
+    .filter-input {
+      background: transparent; border: none; outline: none;
+      color: #e2e8f0; font-size: .82rem; width: 100%;
+    }
+    .filter-input::placeholder { color: #64748b; }
+    .filter-input:focus { outline: none; }
+    .filter-search-wrap:focus-within { border-bottom-color: #6366f1; }
+    .filter-clear {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 10px;
+      background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.3);
+      border-radius: 8px; color: #fca5a5;
+      font-size: .78rem; cursor: pointer; transition: background .15s;
+    }
+    .filter-clear:hover { background: rgba(239,68,68,.28); }
+    .filter-badge {
+      background: rgba(99,102,241,.22); border: 1px solid rgba(99,102,241,.4);
+      border-radius: 20px; padding: 3px 10px;
+      color: #a5b4fc; font-size: .75rem; white-space: nowrap;
+    }
+    body.light-mode .filter-pill { background: rgba(99,102,241,.1); color: #4f46e5; border-color: rgba(99,102,241,.25); }
+    body.light-mode .filter-pill:hover, body.light-mode .filter-pill.active-filter { background: rgba(99,102,241,.2); }
+    body.light-mode .filter-dropdown { background: #fff; border-color: rgba(99,102,241,.25); box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+    body.light-mode .filter-dropdown label { color: #334155; }
+    body.light-mode .filter-input { color: #1e293b; }
+    body.light-mode .filter-badge { background: rgba(99,102,241,.1); color: #4f46e5; }
+    body.light-mode .filter-search-wrap { border-bottom-color: rgba(99,102,241,.3); }
+    body.light-mode .filter-clear { background: rgba(239,68,68,.08); color: #dc2626; border-color: rgba(239,68,68,.25); }
+  </style>
+</head>
+<body>
+
+<!-- ================================================================
+     HEADER
+================================================================ -->
+<header class="glass-header px-4 py-2">
+  <div class="max-w-[1600px] mx-auto flex items-center gap-3">
+
+    <!-- Left: Logo + Title -->
+    <div class="flex items-center gap-2 shrink-0">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+        <i data-lucide="boxes" class="w-4 h-4 text-white"></i>
+      </div>
+      <div class="leading-tight">
+        <div class="text-sm font-bold text-white">庫存分析智能儀表板</div>
+        <div class="text-[0.6rem] text-slate-400">Inventory Strategic OS v3.0</div>
+      </div>
+    </div>
+
+    <!-- Center: Nav -->
+    <nav class="flex-1 nav-scroll">
+      <div class="flex items-center gap-1 min-w-max">
+        <button class="glass-btn active" data-tab="tab-overview">
+          <i data-lucide="layout-dashboard" class="w-3 h-3"></i>總覽
+        </button>
+        <button class="glass-btn" data-tab="tab-trend">
+          <i data-lucide="trending-up" class="w-3 h-3"></i>趨勢周轉
+        </button>
+        <button class="glass-btn" data-tab="tab-structure">
+          <i data-lucide="pie-chart" class="w-3 h-3"></i>結構ABC
+        </button>
+        <button class="glass-btn" data-tab="tab-aging">
+          <i data-lucide="clock" class="w-3 h-3"></i>庫齡風險
+        </button>
+        <button class="glass-btn" data-tab="tab-forecast">
+          <i data-lucide="line-chart" class="w-3 h-3"></i>預測補貨
+        </button>
+        <button class="glass-btn" data-tab="tab-supply">
+          <i data-lucide="link" class="w-3 h-3"></i>供應鏈
+        </button>
+        <button class="glass-btn" data-tab="tab-items">
+          <i data-lucide="list" class="w-3 h-3"></i>品項剖析
+        </button>
+        <button class="glass-btn" data-tab="tab-actions">
+          <i data-lucide="zap" class="w-3 h-3"></i>策略行動
+        </button>
+        <button class="glass-btn" data-tab="tab-whatif">
+          <i data-lucide="sliders" class="w-3 h-3"></i>情境模擬
+        </button>
+        <button class="glass-btn" data-tab="tab-eoq">
+          <i data-lucide="calculator" class="w-3 h-3"></i>EOQ成本
+        </button>
+        <button class="glass-btn" data-tab="tab-fifo">
+          <i data-lucide="layers" class="w-3 h-3"></i>FIFO批次
+        </button>
+        <button class="glass-btn" data-tab="tab-quality">
+          <i data-lucide="shield-check" class="w-3 h-3"></i>資料品質
+        </button>
+        <button class="glass-btn" data-tab="tab-report">
+          <i data-lucide="file-text" class="w-3 h-3"></i>報告中心
+        </button>
+        <button class="glass-btn" data-tab="tab-settings">
+          <i data-lucide="settings" class="w-3 h-3"></i>設定DAX
+        </button>
+      </div>
+    </nav>
+
+    <!-- Right: Controls -->
+    <div class="flex items-center gap-2 shrink-0">
+      <!-- Clock -->
+      <span id="header-clock" class="text-xs text-slate-400 tabular-nums hidden md:block"></span>
+      <!-- System status -->
+      <span class="flex items-center gap-1 text-[0.65rem] text-emerald-400 hidden md:flex">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>系統運作中
+      </span>
+      <!-- Dark / Light toggle -->
+      <button id="btn-darkmode" class="glass-btn" title="切換深淺色模式">
+        <i data-lucide="moon" class="w-3 h-3"></i>
+      </button>
+      <!-- Upload -->
+      <button class="glass-btn text-blue-400" onclick="document.getElementById('file-upload').click()">
+        <i data-lucide="upload-cloud" class="w-3 h-3"></i>上傳資料
+      </button>
+      <input type="file" id="file-upload" accept=".xlsx,.xls,.csv" class="hidden" />
+      <!-- Download -->
+      <button id="btn-header-download" class="glass-btn text-emerald-400">
+        <i data-lucide="download" class="w-3 h-3"></i>下載資料
+      </button>
+    </div>
+
+  </div>
+</header>
+
+<!-- ================================================================
+     MAIN CONTENT
+================================================================ -->
+<main class="p-4 max-w-[1600px] mx-auto">
+
+  <!-- ══ GLOBAL FILTER BAR ══ -->
+  <div id="global-filter-bar" class="glass-panel p-3 mb-3 flex flex-wrap items-center gap-3">
+
+    <!-- Year filter -->
+    <div class="filter-group">
+      <button id="year-filter-btn" class="filter-pill" onclick="toggleFilterDropdown('year-dropdown')">
+        <i data-lucide="calendar" style="width:14px;height:14px"></i>
+        <span id="year-filter-label">年度：全部</span>
+        <i data-lucide="chevron-down" style="width:12px;height:12px"></i>
+      </button>
+      <div id="year-dropdown" class="filter-dropdown" style="display:none"></div>
+    </div>
+
+    <!-- Category filter -->
+    <div class="filter-group">
+      <button id="cat-filter-btn" class="filter-pill" onclick="toggleFilterDropdown('cat-dropdown')">
+        <i data-lucide="tag" style="width:14px;height:14px"></i>
+        <span id="cat-filter-label">品類：全部</span>
+        <i data-lucide="chevron-down" style="width:12px;height:12px"></i>
+      </button>
+      <div id="cat-dropdown" class="filter-dropdown" style="display:none"></div>
+    </div>
+
+    <!-- Product search -->
+    <div class="filter-search-wrap">
+      <i data-lucide="search" style="width:14px;height:14px;color:#64748b;flex-shrink:0"></i>
+      <input id="global-search" type="text" class="filter-input" placeholder="品名 / 品號搜尋…" autocomplete="off" />
+    </div>
+
+    <!-- Clear button -->
+    <button id="btn-clear-filter" class="filter-clear" style="display:none" onclick="clearGlobalFilter()">
+      <i data-lucide="x" style="width:14px;height:14px"></i>清除篩選
+    </button>
+
+    <!-- Active filter badge -->
+    <span id="filter-badge" class="filter-badge" style="display:none"></span>
+
+  </div>
+
+  <!-- ==============================================================
+       TAB 1: 總覽 Overview
+  ============================================================== -->
+  <div id="tab-overview" class="tab-content active">
+
+    <!-- KPI Row 1 -->
+    <div class="grid grid-cols-4 gap-3 mb-3 kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">庫存總金額</div>
+        <div class="flex items-end gap-1">
+          <span id="kpi-total-inv" class="kpi-value text-blue-400">—</span>
+          <span class="kpi-unit mb-1">萬元</span>
+        </div>
+        <div class="progress-bar"><div id="pb-total-inv" class="progress-fill" style="width:0%"></div></div>
+        <div id="trend-total-inv" class="kpi-trend alert-green">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">庫存天數 DSI</div>
+        <div class="flex items-end gap-1">
+          <span id="kpi-dsi" class="kpi-value text-amber-400">—</span>
+          <span class="kpi-unit mb-1">天</span>
+        </div>
+        <div class="progress-bar"><div id="pb-dsi" class="progress-fill warning" style="width:0%"></div></div>
+        <div id="trend-dsi" class="kpi-trend alert-yellow">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">庫齡 &gt;90天比例</div>
+        <div class="flex items-end gap-1">
+          <span id="kpi-aging" class="kpi-value text-red-400">—</span>
+          <span class="kpi-unit mb-1">%</span>
+        </div>
+        <div class="progress-bar"><div id="pb-aging" class="progress-fill warning" style="width:0%"></div></div>
+        <div id="trend-aging" class="kpi-trend alert-red">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">庫存健康分</div>
+        <div class="flex items-end gap-1">
+          <span id="kpi-health" class="kpi-value text-emerald-400">—</span>
+          <span class="kpi-unit mb-1">/ 100</span>
+        </div>
+        <div class="progress-bar"><div id="pb-health" class="progress-fill success" style="width:0%"></div></div>
+        <div id="trend-health" class="kpi-trend alert-green">—</div>
+      </div>
+    </div>
+
+    <!-- KPI Row 2 -->
+    <div class="grid grid-cols-4 gap-3 mb-3 kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">存貨周轉率</div>
+        <div class="flex items-end gap-1">
+          <span id="kpi-turnover" class="kpi-value text-indigo-400">—</span>
+          <span class="kpi-unit mb-1">次/年</span>
+        </div>
+        <div class="progress-bar"><div id="pb-turnover" class="progress-fill" style="width:0%"></div></div>
+        <div id="trend-turnover" class="kpi-trend alert-green">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">存銷比 STR</div>
+        <div class="flex items-end gap-1">
+          <span id="kpi-str" class="kpi-value text-cyan-400">—</span>
+          <span class="kpi-unit mb-1">快銷</span>
+        </div>
+        <div class="progress-bar"><div id="pb-str" class="progress-fill success" style="width:0%"></div></div>
+        <div id="trend-str" class="kpi-trend alert-green">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">GMROI</div>
+        <div class="flex items-end gap-1">
+          <span id="kpi-gmroi" class="kpi-value text-purple-400">—</span>
+          <span class="kpi-unit mb-1">倍</span>
+        </div>
+        <div class="progress-bar"><div id="pb-gmroi" class="progress-fill" style="width:0%"></div></div>
+        <div id="trend-gmroi" class="kpi-trend alert-green">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">缺貨次數</div>
+        <div class="flex items-end gap-1">
+          <span id="kpi-stockouts" class="kpi-value text-rose-400">—</span>
+          <span class="kpi-unit mb-1">次</span>
+        </div>
+        <div class="progress-bar"><div id="pb-stockouts" class="progress-fill warning" style="width:0%"></div></div>
+        <div id="trend-stockouts" class="kpi-trend alert-red">—</div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-3 gap-3">
+      <div class="glass-panel p-4 col-span-2">
+        <div class="section-title">庫存金額趨勢 (12個月)</div>
+        <div class="chart-container">
+          <canvas id="chartTrendOverview"></canvas>
+        </div>
+      </div>
+      <div class="glass-panel p-4">
+        <div class="section-title">品類庫存佔比</div>
+        <div class="chart-container">
+          <canvas id="chartCategoryOverview"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-overview -->
+
+  <!-- ==============================================================
+       TAB 2: 趨勢周轉 Trend
+  ============================================================== -->
+  <div id="tab-trend" class="tab-content">
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <div class="glass-panel p-4">
+        <div class="section-title">DSI / 存貨周轉率 (雙軸)</div>
+        <div class="chart-container">
+          <canvas id="chartTurnover"></canvas>
+        </div>
+      </div>
+      <div class="glass-panel p-4">
+        <div class="flex items-center justify-between mb-2">
+          <div class="section-title">存銷比 SSR</div>
+          <div class="flex gap-1">
+            <button id="btn-ssr-long"  class="tab-sub-btn active">長週期SSR</button>
+            <button id="btn-ssr-short" class="tab-sub-btn">短週期SSR</button>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="chartSSR"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="glass-panel p-4">
+        <div class="section-title">月環比成長率 MoM Growth</div>
+        <div class="chart-container">
+          <canvas id="chartGrowth"></canvas>
+        </div>
+      </div>
+      <div class="glass-panel p-4">
+        <div class="section-title">移動平均線 (Actual / 3M MA / 6M MA)</div>
+        <div class="chart-container">
+          <canvas id="chartMA"></canvas>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-trend -->
+
+  <!-- ==============================================================
+       TAB 3: 結構ABC Structure
+  ============================================================== -->
+  <div id="tab-structure" class="tab-content">
+    <!-- ABC Toggle -->
+    <div class="flex items-center gap-2 mb-3">
+      <span class="text-xs text-slate-400">ABC 分析方法：</span>
+      <button id="btn-abc-rel" class="tab-sub-btn active">相對法</button>
+      <button id="btn-abc-abs" class="tab-sub-btn">絕對法</button>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 mb-3">
+      <div class="glass-panel p-4">
+        <div class="section-title">ABC 佔比</div>
+        <div class="chart-container">
+          <canvas id="chartABC"></canvas>
+        </div>
+      </div>
+      <div class="glass-panel p-4">
+        <div class="section-title">供需失衡散佈圖</div>
+        <div class="chart-container">
+          <canvas id="chartImbalance"></canvas>
+        </div>
+      </div>
+      <div class="glass-panel p-4">
+        <div class="section-title">Pareto 累積曲線</div>
+        <div class="chart-container">
+          <canvas id="chartPareto"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABC-XYZ 9-cell Matrix -->
+    <div class="glass-panel p-4">
+      <div class="section-title mb-3">ABC-XYZ 九宮格矩陣</div>
+      <div class="overflow-x-auto">
+        <table id="abcxyz-matrix" class="w-full" style="border-collapse:separate; border-spacing:6px;">
+          <thead>
+            <tr>
+              <th class="text-xs text-slate-500 p-2 text-right w-16">ABC ↓ / XYZ →</th>
+              <th class="text-xs text-emerald-400 p-2 text-center">X (高穩定)</th>
+              <th class="text-xs text-yellow-400 p-2 text-center">Y (中波動)</th>
+              <th class="text-xs text-red-400 p-2 text-center">Z (高波動)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-xs text-blue-400 font-bold p-2 text-right">A (高值)</td>
+              <td><div class="abcxyz-cell cell-ax" data-cell="AX"><span class="cell-label">AX</span><span class="cell-count" id="cnt-ax">—品</span></div></td>
+              <td><div class="abcxyz-cell cell-ay" data-cell="AY"><span class="cell-label">AY</span><span class="cell-count" id="cnt-ay">—品</span></div></td>
+              <td><div class="abcxyz-cell cell-az" data-cell="AZ"><span class="cell-label">AZ</span><span class="cell-count" id="cnt-az">—品</span></div></td>
+            </tr>
+            <tr>
+              <td class="text-xs text-amber-400 font-bold p-2 text-right">B (中值)</td>
+              <td><div class="abcxyz-cell cell-bx" data-cell="BX"><span class="cell-label">BX</span><span class="cell-count" id="cnt-bx">—品</span></div></td>
+              <td><div class="abcxyz-cell cell-by" data-cell="BY"><span class="cell-label">BY</span><span class="cell-count" id="cnt-by">—品</span></div></td>
+              <td><div class="abcxyz-cell cell-bz" data-cell="BZ"><span class="cell-label">BZ</span><span class="cell-count" id="cnt-bz">—品</span></div></td>
+            </tr>
+            <tr>
+              <td class="text-xs text-slate-400 font-bold p-2 text-right">C (低值)</td>
+              <td><div class="abcxyz-cell cell-cx" data-cell="CX"><span class="cell-label">CX</span><span class="cell-count" id="cnt-cx">—品</span></div></td>
+              <td><div class="abcxyz-cell cell-cy" data-cell="CY"><span class="cell-label">CY</span><span class="cell-count" id="cnt-cy">—品</span></div></td>
+              <td><div class="abcxyz-cell cell-cz" data-cell="CZ"><span class="cell-label">CZ</span><span class="cell-count" id="cnt-cz">—品</span></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /tab-structure -->
+
+  <!-- ==============================================================
+       TAB 4: 庫齡風險 Aging
+  ============================================================== -->
+  <div id="tab-aging" class="tab-content">
+    <div class="grid grid-cols-3 gap-3 mb-3">
+      <div class="glass-panel p-4 col-span-2">
+        <div class="section-title">庫齡分層分析 (5級)</div>
+        <div class="chart-container">
+          <canvas id="chartAging"></canvas>
+        </div>
+      </div>
+      <div class="flex flex-col gap-3">
+        <!-- Loss Estimate -->
+        <div class="glass-panel p-4 flex-1">
+          <div class="section-title">預估損失金額</div>
+          <div id="loss-estimate" class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">30-60天</span><span id="loss-30" class="text-yellow-400">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">60-90天</span><span id="loss-60" class="text-amber-400">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">90-180天</span><span id="loss-90" class="text-orange-400">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">&gt;180天</span><span id="loss-180" class="text-red-400">—</span></div>
+            <div class="divider"></div>
+            <div class="flex justify-between font-bold"><span>合計</span><span id="loss-total" class="text-red-400">—</span></div>
+          </div>
+        </div>
+        <!-- Divergence Signal -->
+        <div class="glass-panel p-4 flex-1">
+          <div class="section-title">背離信號偵測</div>
+          <div id="divergence-panel" class="space-y-2 text-xs text-slate-400">
+            <div class="text-center py-2">載入資料後顯示</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div class="glass-panel p-4">
+        <div class="section-title">庫存健康雷達</div>
+        <div class="chart-container">
+          <canvas id="chartHealth"></canvas>
+        </div>
+      </div>
+      <!-- Configurable Loss Rates -->
+      <div class="glass-panel p-4">
+        <div class="section-title">損失率參數設定</div>
+        <div class="space-y-3 text-sm">
+          <div class="flex items-center justify-between gap-3">
+            <label class="text-slate-400 whitespace-nowrap w-28">0-30天損失率</label>
+            <input type="number" id="loss-rate-0" class="w-24" value="0" min="0" max="100" step="1" />
+            <span class="text-slate-500">%</span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <label class="text-slate-400 whitespace-nowrap w-28">30-60天損失率</label>
+            <input type="number" id="loss-rate-30" class="w-24" value="5" min="0" max="100" step="1" />
+            <span class="text-slate-500">%</span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <label class="text-slate-400 whitespace-nowrap w-28">60-90天損失率</label>
+            <input type="number" id="loss-rate-60" class="w-24" value="15" min="0" max="100" step="1" />
+            <span class="text-slate-500">%</span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <label class="text-slate-400 whitespace-nowrap w-28">90-180天損失率</label>
+            <input type="number" id="loss-rate-90" class="w-24" value="30" min="0" max="100" step="1" />
+            <span class="text-slate-500">%</span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <label class="text-slate-400 whitespace-nowrap w-28">&gt;180天損失率</label>
+            <input type="number" id="loss-rate-180" class="w-24" value="60" min="0" max="100" step="1" />
+            <span class="text-slate-500">%</span>
+          </div>
+          <button id="btn-update-loss" class="glass-btn mt-2">
+            <i data-lucide="refresh-cw" class="w-3 h-3"></i>更新計算
+          </button>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-aging -->
+
+  <!-- ==============================================================
+       TAB 5: 預測補貨 Forecast
+  ============================================================== -->
+  <div id="tab-forecast" class="tab-content">
+    <div class="grid grid-cols-3 gap-3 mb-3">
+      <!-- Fisher Test Panel -->
+      <div class="glass-panel p-4">
+        <div class="section-title">Fisher 週期性檢定</div>
+        <div id="fisher-panel" class="space-y-2 text-xs">
+          <div class="text-slate-400 text-center py-3">載入資料後顯示</div>
+        </div>
+      </div>
+      <!-- Seasonal Radar -->
+      <div class="glass-panel p-4 col-span-2">
+        <div class="section-title">季節性指數 (12個月)</div>
+        <div class="chart-container">
+          <canvas id="chartSeasonalRadar"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass-panel p-4 mb-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="section-title">複合預測模型 (移動均值 / 趨勢 / 複合)</div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-slate-400">服務水準：</span>
+          <button id="btn-svc-90" class="tab-sub-btn">90%</button>
+          <button id="btn-svc-95" class="tab-sub-btn active">95%</button>
+          <button id="btn-svc-99" class="tab-sub-btn">99%</button>
+        </div>
+      </div>
+      <div class="chart-container-lg">
+        <canvas id="chartForecast"></canvas>
+      </div>
+    </div>
+
+    <!-- ROP Table -->
+    <div class="glass-panel p-4">
+      <div class="section-title">再訂購點 (ROP) 建議清單</div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>品名</th><th>日均需求</th><th>前置時間(天)</th>
+              <th>安全庫存</th><th>ROP</th><th>現有庫存</th><th>狀態</th>
+            </tr>
+          </thead>
+          <tbody id="rop-table-body">
+            <tr><td colspan="7" class="text-center text-slate-500 py-4">載入資料後顯示</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /tab-forecast -->
+
+  <!-- ==============================================================
+       TAB 6: 供應鏈 Supply
+  ============================================================== -->
+  <div id="tab-supply" class="tab-content">
+    <!-- Supply KPIs -->
+    <div class="grid grid-cols-3 gap-3 mb-3">
+      <div class="kpi-card">
+        <div class="kpi-label">整體 GMROI</div>
+        <div class="flex items-end gap-1">
+          <span id="supply-gmroi" class="kpi-value text-purple-400">—</span>
+          <span class="kpi-unit mb-1">倍</span>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">缺貨損失估算</div>
+        <div class="flex items-end gap-1">
+          <span id="supply-stockout-loss" class="kpi-value text-red-400">—</span>
+          <span class="kpi-unit mb-1">萬元</span>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">平均前置時間</div>
+        <div class="flex items-end gap-1">
+          <span id="supply-avg-leadtime" class="kpi-value text-cyan-400">—</span>
+          <span class="kpi-unit mb-1">天</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <div class="glass-panel p-4">
+        <div class="section-title">各品類 GMROI 比較</div>
+        <div class="chart-container">
+          <canvas id="chartGMROI"></canvas>
+        </div>
+      </div>
+      <div class="glass-panel p-4">
+        <div class="section-title">供需熱力圖 (品類 × 月份)</div>
+        <div id="chartHeatmap" class="overflow-auto"></div>
+      </div>
+    </div>
+
+    <!-- Replenishment Table -->
+    <div class="glass-panel p-4">
+      <div class="section-title">補貨排程建議</div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>品類</th><th>品名</th><th>建議補貨量</th>
+              <th>建議補貨時間</th><th>預估成本</th><th>優先度</th>
+            </tr>
+          </thead>
+          <tbody id="replenish-table-body">
+            <tr><td colspan="6" class="text-center text-slate-500 py-4">載入資料後顯示</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /tab-supply -->
+
+  <!-- ==============================================================
+       TAB 7: 品項剖析 Items
+  ============================================================== -->
+  <div id="tab-items" class="tab-content">
+    <!-- Filters -->
+    <div class="glass-panel p-3 mb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center gap-1">
+          <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400"></i>
+          <input type="text" id="item-search" placeholder="搜尋品項名稱/ID…" class="w-44" />
+        </div>
+        <select id="item-cat-filter">
+          <option value="">全部品類</option>
+        </select>
+        <select id="item-abc-filter">
+          <option value="">全部ABC</option>
+          <option value="A">A 類</option>
+          <option value="B">B 類</option>
+          <option value="C">C 類</option>
+        </select>
+        <select id="item-xyz-filter">
+          <option value="">全部XYZ</option>
+          <option value="X">X (穩定)</option>
+          <option value="Y">Y (波動)</option>
+          <option value="Z">Z (高波動)</option>
+        </select>
+        <select id="item-sort">
+          <option value="value_desc">庫存金額 ↓</option>
+          <option value="value_asc">庫存金額 ↑</option>
+          <option value="aging_desc">庫齡 ↓</option>
+          <option value="aging_asc">庫齡 ↑</option>
+          <option value="gmroi_desc">GMROI ↓</option>
+          <option value="str_desc">售磬率 ↓</option>
+        </select>
+        <button id="btn-export-items-csv" class="glass-btn text-emerald-400 ml-auto">
+          <i data-lucide="file-down" class="w-3 h-3"></i>匯出CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="glass-panel p-0 overflow-hidden mb-3">
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>品類</th><th>產品ID</th><th>名稱</th>
+              <th>ABC</th><th>XYZ</th><th>ABCXYZ</th>
+              <th class="text-right">庫存量</th>
+              <th class="text-right">庫存金額(元)</th>
+              <th class="text-right">庫齡(天)</th>
+              <th>STR類型</th>
+              <th class="text-right">售磬率</th>
+              <th class="text-right">GMROI</th>
+              <th>ROP狀態</th>
+            </tr>
+          </thead>
+          <tbody id="items-table-body">
+            <tr><td colspan="13" class="text-center text-slate-500 py-6">載入資料後顯示</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex items-center justify-between text-xs text-slate-400">
+      <div class="flex items-center gap-2">
+        <span>每頁顯示</span>
+        <select id="items-per-page" class="w-16">
+          <option value="20">20</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+        </select>
+        <span>筆</span>
+      </div>
+      <div id="page-info" class="text-slate-400">第 — / — 頁（共 — 筆）</div>
+      <div class="flex items-center gap-1">
+        <button id="btn-prev-page" class="glass-btn">
+          <i data-lucide="chevron-left" class="w-3 h-3"></i>上一頁
+        </button>
+        <button id="btn-next-page" class="glass-btn">
+          下一頁<i data-lucide="chevron-right" class="w-3 h-3"></i>
+        </button>
+      </div>
+    </div>
+  </div><!-- /tab-items -->
+
+  <!-- ==============================================================
+       TAB 8: 策略行動 Actions
+  ============================================================== -->
+  <div id="tab-actions" class="tab-content">
+    <div class="grid grid-cols-3 gap-3">
+      <!-- Alert List -->
+      <div class="col-span-2 glass-panel p-4">
+        <div class="section-title">策略行動清單</div>
+        <div id="action-list" class="space-y-2">
+          <div class="text-center text-slate-500 py-6">載入資料後顯示行動建議</div>
+        </div>
+      </div>
+
+      <!-- Right Panel -->
+      <div class="flex flex-col gap-3">
+        <!-- Thresholds -->
+        <div class="glass-panel p-4">
+          <div class="section-title">閾值設定</div>
+          <div class="space-y-3 text-sm">
+            <div>
+              <label class="text-slate-400 text-xs">DSI 上限 (天)</label>
+              <input type="number" id="threshold-dsi" class="w-full mt-1" value="90" min="1" />
+            </div>
+            <div>
+              <label class="text-slate-400 text-xs">庫齡占比上限 (%)</label>
+              <input type="number" id="threshold-aging" class="w-full mt-1" value="20" min="0" max="100" />
+            </div>
+            <div>
+              <label class="text-slate-400 text-xs">GMROI 下限</label>
+              <input type="number" id="threshold-gmroi" class="w-full mt-1" value="1.2" step="0.1" min="0" />
+            </div>
+            <div>
+              <label class="text-slate-400 text-xs">供需失衡指數上限</label>
+              <input type="number" id="threshold-imbalance" class="w-full mt-1" value="0.3" step="0.05" min="0" max="1" />
+            </div>
+            <button id="btn-update-thresholds" class="glass-btn w-full justify-center">
+              <i data-lucide="save" class="w-3 h-3"></i>更新閾值
+            </button>
+          </div>
+        </div>
+
+        <!-- KPI Scorecard -->
+        <div class="glass-panel p-4 flex-1">
+          <div class="section-title">KPI 記分卡</div>
+          <div id="scorecard" class="space-y-3">
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-400">庫存健康</span>
+                <span id="sc-health-val" class="text-white">—</span>
+              </div>
+              <div class="progress-bar"><div id="sc-health" class="progress-fill success" style="width:0%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-400">周轉效率</span>
+                <span id="sc-turn-val" class="text-white">—</span>
+              </div>
+              <div class="progress-bar"><div id="sc-turn" class="progress-fill" style="width:0%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-400">庫齡控制</span>
+                <span id="sc-aging-val" class="text-white">—</span>
+              </div>
+              <div class="progress-bar"><div id="sc-aging" class="progress-fill warning" style="width:0%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-400">預測準確度</span>
+                <span id="sc-forecast-val" class="text-white">—</span>
+              </div>
+              <div class="progress-bar"><div id="sc-forecast" class="progress-fill success" style="width:0%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-400">供應鏈韌性</span>
+                <span id="sc-supply-val" class="text-white">—</span>
+              </div>
+              <div class="progress-bar"><div id="sc-supply" class="progress-fill" style="width:0%"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-400">獲利貢獻</span>
+                <span id="sc-profit-val" class="text-white">—</span>
+              </div>
+              <div class="progress-bar"><div id="sc-profit" class="progress-fill success" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-actions -->
+
+  <!-- ==============================================================
+       TAB 9: 情境模擬 What-If
+  ============================================================== -->
+  <div id="tab-whatif" class="tab-content">
+    <div class="grid grid-cols-3 gap-3">
+      <!-- Sliders -->
+      <div class="glass-panel p-4">
+        <div class="section-title">情境參數</div>
+        <div class="space-y-5">
+          <!-- Growth Rate -->
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <label class="text-slate-300">需求成長率</label>
+              <span id="val-growth" class="text-blue-400 font-bold">+10%</span>
+            </div>
+            <input type="range" id="slider-growth" min="-30" max="50" value="10" step="1" />
+            <div class="flex justify-between text-[0.6rem] text-slate-500 mt-0.5"><span>-30%</span><span>+50%</span></div>
+          </div>
+          <!-- Service Level -->
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <label class="text-slate-300">服務水準</label>
+              <span id="val-svc" class="text-emerald-400 font-bold">95%</span>
+            </div>
+            <input type="range" id="slider-svc" min="85" max="99" value="95" step="1" />
+            <div class="flex justify-between text-[0.6rem] text-slate-500 mt-0.5"><span>85%</span><span>99%</span></div>
+          </div>
+          <!-- Holding Cost -->
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <label class="text-slate-300">持有成本率</label>
+              <span id="val-hold" class="text-amber-400 font-bold">25%</span>
+            </div>
+            <input type="range" id="slider-hold" min="15" max="35" value="25" step="1" />
+            <div class="flex justify-between text-[0.6rem] text-slate-500 mt-0.5"><span>15%</span><span>35%</span></div>
+          </div>
+          <!-- Lead Time -->
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <label class="text-slate-300">前置時間調整</label>
+              <span id="val-lead" class="text-purple-400 font-bold">±0天</span>
+            </div>
+            <input type="range" id="slider-lead" min="-7" max="14" value="0" step="1" />
+            <div class="flex justify-between text-[0.6rem] text-slate-500 mt-0.5"><span>-7天</span><span>+14天</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- What-If Table + Chart -->
+      <div class="col-span-2 flex flex-col gap-3">
+        <div class="glass-panel p-4">
+          <div class="section-title">三情境比較</div>
+          <div class="table-wrapper">
+            <table id="whatif-table" class="data-table">
+              <thead>
+                <tr>
+                  <th>指標</th>
+                  <th class="text-center">悲觀情境</th>
+                  <th class="text-center">基準情境</th>
+                  <th class="text-center">樂觀情境</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>庫存金額(萬)</td><td id="wi-inv-pes" class="text-center text-red-400">—</td><td id="wi-inv-base" class="text-center text-blue-400">—</td><td id="wi-inv-opt" class="text-center text-emerald-400">—</td></tr>
+                <tr><td>DSI(天)</td><td id="wi-dsi-pes" class="text-center text-red-400">—</td><td id="wi-dsi-base" class="text-center text-blue-400">—</td><td id="wi-dsi-opt" class="text-center text-emerald-400">—</td></tr>
+                <tr><td>安全庫存(萬)</td><td id="wi-ss-pes" class="text-center text-red-400">—</td><td id="wi-ss-base" class="text-center text-blue-400">—</td><td id="wi-ss-opt" class="text-center text-emerald-400">—</td></tr>
+                <tr><td>持有成本(萬)</td><td id="wi-hc-pes" class="text-center text-red-400">—</td><td id="wi-hc-base" class="text-center text-blue-400">—</td><td id="wi-hc-opt" class="text-center text-emerald-400">—</td></tr>
+                <tr><td>GMROI</td><td id="wi-gm-pes" class="text-center text-red-400">—</td><td id="wi-gm-base" class="text-center text-blue-400">—</td><td id="wi-gm-opt" class="text-center text-emerald-400">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="glass-panel p-4 flex-1">
+          <div class="section-title">情境影響圖</div>
+          <div class="chart-container">
+            <canvas id="chartWhatif"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-whatif -->
+
+  <!-- ==============================================================
+       TAB 10: EOQ 成本 EOQ
+  ============================================================== -->
+  <div id="tab-eoq" class="tab-content">
+    <div class="grid grid-cols-3 gap-3">
+      <!-- EOQ Params -->
+      <div class="glass-panel p-4">
+        <div class="section-title">EOQ 參數</div>
+        <div class="space-y-4 text-sm">
+          <div>
+            <label class="text-slate-400 text-xs">每次訂購成本 (ORDER_COST, 元)</label>
+            <input type="number" id="eoq-order-cost" class="w-full mt-1" value="500" min="1" />
+          </div>
+          <div>
+            <label class="text-slate-400 text-xs">年持有成本率 (HOLDING_RATE, %)</label>
+            <input type="number" id="eoq-holding-rate" class="w-full mt-1" value="25" min="1" max="100" step="0.5" />
+          </div>
+          <button id="btn-calc-eoq" class="glass-btn w-full justify-center">
+            <i data-lucide="calculator" class="w-3 h-3"></i>計算 EOQ
+          </button>
+          <div class="divider"></div>
+          <div class="text-xs text-slate-500">
+            <p>EOQ = √(2DS / H)</p>
+            <p class="mt-1">D=年需求量 S=訂購成本</p>
+            <p>H=單位持有成本/年</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- EOQ Chart -->
+      <div class="glass-panel p-4 col-span-2">
+        <div class="section-title">總成本曲線 (EOQ 最優點)</div>
+        <div class="chart-container-lg">
+          <canvas id="chartEOQ"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- EOQ Table -->
+    <div class="glass-panel p-4 mt-3">
+      <div class="section-title">EOQ 建議清單</div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>品名</th>
+              <th class="text-right">年需求量</th>
+              <th class="text-right">EOQ建議量</th>
+              <th class="text-right">目前批量偏離</th>
+              <th class="text-right">年持有成本(元)</th>
+              <th class="text-right">年訂購成本(元)</th>
+            </tr>
+          </thead>
+          <tbody id="eoq-table-body">
+            <tr><td colspan="6" class="text-center text-slate-500 py-4">計算後顯示</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /tab-eoq -->
+
+  <!-- ==============================================================
+       TAB 11: FIFO 批次 FIFO
+  ============================================================== -->
+  <div id="tab-fifo" class="tab-content">
+    <div class="grid grid-cols-3 gap-3 mb-3">
+      <!-- Product Selector + Stats -->
+      <div class="glass-panel p-4">
+        <div class="section-title">批次選擇</div>
+        <div class="mb-3">
+          <label class="text-xs text-slate-400">選擇品項</label>
+          <select id="fifo-product-select" class="w-full mt-1">
+            <option value="">載入資料後選擇…</option>
+          </select>
+        </div>
+        <div class="divider"></div>
+        <div class="section-title mt-2">FIFO 統計</div>
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-slate-400">剩餘批次數</span>
+            <span id="fifo-batch-count" class="text-blue-400">—</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">加權平均庫齡</span>
+            <span id="fifo-avg-aging" class="text-amber-400">— 天</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">剩餘庫存總值</span>
+            <span id="fifo-total-value" class="text-emerald-400">— 元</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- FIFO Chart -->
+      <div class="glass-panel p-4 col-span-2">
+        <div class="section-title">FIFO 批次瀑布圖</div>
+        <div class="chart-container">
+          <canvas id="chartFIFO"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Batch Detail Table -->
+    <div class="glass-panel p-4">
+      <div class="section-title">批次明細</div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>批次號</th><th>入庫日期</th><th>入庫數量</th>
+              <th class="text-right">已耗用</th><th class="text-right">剩餘數量</th>
+              <th class="text-right">單位成本(元)</th><th class="text-right">批次金額(元)</th>
+              <th class="text-right">庫齡(天)</th><th>狀態</th>
+            </tr>
+          </thead>
+          <tbody id="fifo-table-body">
+            <tr><td colspan="9" class="text-center text-slate-500 py-4">選擇品項後顯示</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /tab-fifo -->
+
+  <!-- ==============================================================
+       TAB 12: 資料品質 Quality
+  ============================================================== -->
+  <div id="tab-quality" class="tab-content">
+    <div class="grid grid-cols-3 gap-3 mb-3">
+      <!-- Gauge -->
+      <div class="glass-panel p-4 flex flex-col items-center justify-center">
+        <div class="section-title w-full">資料品質總分</div>
+        <div class="gauge-wrap my-4">
+          <svg class="gauge-svg" viewBox="0 0 140 80">
+            <path d="M 10 75 A 60 60 0 0 1 130 75" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="12" stroke-linecap="round"/>
+            <path id="gauge-arc" d="M 10 75 A 60 60 0 0 1 130 75" fill="none" stroke="#10b981" stroke-width="12" stroke-linecap="round"
+                  stroke-dasharray="188.5" stroke-dashoffset="188.5" style="transition:stroke-dashoffset 1s ease;"/>
+          </svg>
+          <div class="gauge-text text-emerald-400" id="quality-score">—</div>
+        </div>
+        <div class="text-xs text-slate-400">資料完整度與一致性</div>
+      </div>
+
+      <!-- Issue Summary -->
+      <div class="glass-panel p-4">
+        <div class="section-title">問題摘要</div>
+        <div class="space-y-3 mt-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-red-500"></span>
+              <span class="text-sm text-slate-300">嚴重錯誤</span>
+            </div>
+            <span id="quality-errors" class="text-red-400 font-bold text-lg">—</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+              <span class="text-sm text-slate-300">警告</span>
+            </div>
+            <span id="quality-warnings" class="text-amber-400 font-bold text-lg">—</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+              <span class="text-sm text-slate-300">注意事項</span>
+            </div>
+            <span id="quality-notices" class="text-blue-400 font-bold text-lg">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quality Checklist -->
+      <div class="glass-panel p-4">
+        <div class="section-title">品質檢核項目</div>
+        <div class="space-y-2 text-xs">
+          <div class="flex items-center gap-2"><span id="qc-dates" class="text-slate-500">○</span><span>日期欄位完整性</span></div>
+          <div class="flex items-center gap-2"><span id="qc-qty" class="text-slate-500">○</span><span>數量欄位非負值</span></div>
+          <div class="flex items-center gap-2"><span id="qc-cost" class="text-slate-500">○</span><span>成本欄位合理性</span></div>
+          <div class="flex items-center gap-2"><span id="qc-sku" class="text-slate-500">○</span><span>SKU唯一性</span></div>
+          <div class="flex items-center gap-2"><span id="qc-balance" class="text-slate-500">○</span><span>進出庫平衡</span></div>
+          <div class="flex items-center gap-2"><span id="qc-cat" class="text-slate-500">○</span><span>品類代碼一致性</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Issues Table -->
+    <div class="glass-panel p-4">
+      <div class="section-title">問題清單</div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>嚴重度</th><th>品項</th><th>日期</th><th>問題說明</th>
+            </tr>
+          </thead>
+          <tbody id="quality-table-body">
+            <tr><td colspan="4" class="text-center text-slate-500 py-4">載入資料後顯示</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /tab-quality -->
+
+  <!-- ==============================================================
+       TAB 13: 報告中心 Report
+  ============================================================== -->
+  <div id="tab-report" class="tab-content">
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <!-- PDF Export -->
+      <div class="glass-panel p-4">
+        <div class="section-title">PDF 報告匯出</div>
+        <p class="text-xs text-slate-400 mb-3">將目前儀表板完整匯出為 PDF 報告，包含所有圖表與 KPI 數據。</p>
+        <button id="btn-pdf" class="glass-btn text-red-400">
+          <i data-lucide="file-type" class="w-3 h-3"></i>匯出 PDF 報告
+        </button>
+      </div>
+
+      <!-- Excel Export -->
+      <div class="glass-panel p-4">
+        <div class="section-title">Excel 資料匯出</div>
+        <p class="text-xs text-slate-400 mb-3">將所有分析結果匯出為多工作表 Excel 檔案，包含 ABC、庫齡、ROP 等。</p>
+        <button id="btn-excel" class="glass-btn text-emerald-400">
+          <i data-lucide="table-2" class="w-3 h-3"></i>匯出 Excel
+        </button>
+      </div>
+    </div>
+
+    <!-- Text Summary -->
+    <div class="glass-panel p-4 mb-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="section-title">文字摘要報告</div>
+        <button id="btn-copy-report" class="glass-btn">
+          <i data-lucide="copy" class="w-3 h-3"></i>複製
+        </button>
+      </div>
+      <div id="report-text" class="text-xs text-slate-300 leading-relaxed bg-black/20 rounded-lg p-3 min-h-[6rem] whitespace-pre-wrap">
+        載入資料後自動生成摘要報告…
+      </div>
+    </div>
+
+    <!-- Snapshots -->
+    <div class="glass-panel p-4">
+      <div class="flex items-center justify-between mb-3">
+        <div class="section-title">歷史快照</div>
+        <button id="btn-save-snapshot" class="glass-btn text-indigo-400">
+          <i data-lucide="camera" class="w-3 h-3"></i>儲存快照
+        </button>
+      </div>
+      <div id="snapshots-list" class="space-y-2 text-xs text-slate-400">
+        <div class="text-center py-3">尚無歷史快照</div>
+      </div>
+    </div>
+  </div><!-- /tab-report -->
+
+  <!-- ==============================================================
+       TAB 14: 設定DAX Settings
+  ============================================================== -->
+  <div id="tab-settings" class="tab-content">
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <!-- Upload Zone -->
+      <div class="glass-panel p-4">
+        <div class="section-title">資料上傳</div>
+        <div id="drop-zone" class="mb-3">
+          <i data-lucide="upload-cloud" class="w-8 h-8 text-indigo-400 mx-auto mb-2"></i>
+          <p class="text-sm text-slate-300">拖曳 Excel / CSV 至此，或點擊選擇檔案</p>
+          <p class="text-xs text-slate-500 mt-1">支援 .xlsx、.xls、.csv</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button id="btn-load-demo" class="glass-btn text-blue-400">
+            <i data-lucide="database" class="w-3 h-3"></i>載入範例資料
+          </button>
+          <button id="btn-export-json" class="glass-btn text-amber-400">
+            <i data-lucide="braces" class="w-3 h-3"></i>匯出JSON
+          </button>
+          <button id="btn-export-csv" class="glass-btn text-emerald-400">
+            <i data-lucide="file-down" class="w-3 h-3"></i>匯出CSV
+          </button>
+          <button id="btn-reset" class="glass-btn text-red-400">
+            <i data-lucide="trash-2" class="w-3 h-3"></i>重置
+          </button>
+        </div>
+      </div>
+
+      <!-- Display Settings -->
+      <div class="glass-panel p-4">
+        <div class="section-title">顯示設定</div>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-slate-300">深色 / 淺色模式</span>
+            <button id="btn-darkmode-settings" class="glass-btn">
+              <i data-lucide="moon" class="w-3 h-3"></i>切換模式
+            </button>
+          </div>
+          <div class="divider"></div>
+          <p class="text-xs text-slate-500">
+            系統版本：Inventory Strategic OS v3.0<br/>
+            建置日期：2026-03-14<br/>
+            支援格式：xlsx / xls / csv<br/>
+            圖表引擎：Chart.js 4.4.0
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- DAX Formula Reference -->
+    <div class="glass-panel p-4">
+      <div class="section-title mb-3">DAX 公式庫（Power BI 參考）</div>
+      <div class="space-y-1" id="dax-accordion">
+
+        <!-- 1 日期表 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>1. 日期表 (Date Table)</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>DateTable =
+ADDCOLUMNS(
+    CALENDAR(DATE(2020,1,1), DATE(2026,12,31)),
+    "Year",       YEAR([Date]),
+    "Month",      MONTH([Date]),
+    "MonthName",  FORMAT([Date], "MMM"),
+    "Quarter",    "Q" & ROUNDUP(MONTH([Date])/3, 0),
+    "YearMonth",  FORMAT([Date], "YYYY-MM"),
+    "WeekNo",     WEEKNUM([Date])
+)</pre>
+          </div>
+        </div>
+
+        <!-- 2 累計入庫 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>2. 累計入庫數量</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>累計入庫數量 =
+CALCULATE(
+    SUM(Inventory[InQty]),
+    FILTER(
+        ALL(DateTable),
+        DateTable[Date] <= MAX(DateTable[Date])
+    )
+)</pre>
+          </div>
+        </div>
+
+        <!-- 3 累計出庫 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>3. 累計出庫數量</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>累計出庫數量 =
+CALCULATE(
+    SUM(Inventory[OutQty]),
+    FILTER(
+        ALL(DateTable),
+        DateTable[Date] <= MAX(DateTable[Date])
+    )
+)</pre>
+          </div>
+        </div>
+
+        <!-- 4 庫存數量 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>4. 庫存數量</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>庫存數量 = [累計入庫數量] - [累計出庫數量]</pre>
+          </div>
+        </div>
+
+        <!-- 5 庫存金額 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>5. 庫存金額</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>庫存金額 =
+SUMX(
+    Inventory,
+    Inventory[StockQty] * Inventory[UnitCost]
+)</pre>
+          </div>
+        </div>
+
+        <!-- 6 期初庫存 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>6. 期初庫存金額</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>期初庫存金額 =
+CALCULATE(
+    [庫存金額],
+    STARTOFMONTH(DateTable[Date])
+)</pre>
+          </div>
+        </div>
+
+        <!-- 7 平均庫存 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>7. 平均庫存金額</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>平均庫存金額 =
+AVERAGEX(
+    VALUES(DateTable[YearMonth]),
+    CALCULATE([庫存金額])
+)</pre>
+          </div>
+        </div>
+
+        <!-- 8 加權平均成本 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>8. 加權平均成本 (WAC)</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>加權平均成本 =
+DIVIDE(
+    SUMX(Inventory, Inventory[InQty] * Inventory[InUnitCost]),
+    SUM(Inventory[InQty]),
+    0
+)</pre>
+          </div>
+        </div>
+
+        <!-- 9 存貨周轉率 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>9. 存貨周轉率</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>存貨周轉率 =
+DIVIDE(
+    [年度銷售成本],
+    [平均庫存金額],
+    0
+)</pre>
+          </div>
+        </div>
+
+        <!-- 10 DSI -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>10. 庫存天數 DSI</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>DSI =
+DIVIDE(
+    [平均庫存金額],
+    DIVIDE([年度銷售成本], 365, 0),
+    0
+)
+-- 或簡化：DSI = 365 / [存貨周轉率]</pre>
+          </div>
+        </div>
+
+        <!-- 11 售磬率 快銷 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>11. 售磬率（快銷 &lt;30天）</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>售磬率_快銷 =
+DIVIDE(
+    CALCULATE(SUM(Sales[Qty]), Sales[LeadDays] < 30),
+    SUM(Inventory[AvgStockQty]),
+    0
+)</pre>
+          </div>
+        </div>
+
+        <!-- 12 售磬率 慢銷 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>12. 售磬率（慢銷 ≥30天）</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>售磬率_慢銷 =
+DIVIDE(
+    CALCULATE(SUM(Sales[Qty]), Sales[LeadDays] >= 30),
+    SUM(Inventory[AvgStockQty]),
+    0
+)</pre>
+          </div>
+        </div>
+
+        <!-- 13 存銷比 長週期 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>13. 存銷比 STR（長週期，12週）</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>存銷比_長週期 =
+DIVIDE(
+    [庫存數量],
+    CALCULATE(
+        AVERAGE(Sales[WeeklySales]),
+        DATESINPERIOD(DateTable[Date], MAX(DateTable[Date]), -12, WEEK)
+    ),
+    0
+)</pre>
+          </div>
+        </div>
+
+        <!-- 14 存銷比 短週期 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>14. 存銷比 STR（短週期，4週）</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>存銷比_短週期 =
+DIVIDE(
+    [庫存數量],
+    CALCULATE(
+        AVERAGE(Sales[WeeklySales]),
+        DATESINPERIOD(DateTable[Date], MAX(DateTable[Date]), -4, WEEK)
+    ),
+    0
+)</pre>
+          </div>
+        </div>
+
+        <!-- 15 ABC 累計比例 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>15. ABC 累計金額比例</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>ABC_累計比例 =
+VAR TotalValue = CALCULATE(SUM(Inventory[StockValue]), ALL(Inventory))
+VAR CumValue =
+    CALCULATE(
+        SUM(Inventory[StockValue]),
+        FILTER(
+            ALL(Inventory),
+            Inventory[StockValue] >= MIN(Inventory[StockValue])
+        )
+    )
+RETURN DIVIDE(CumValue, TotalValue, 0)</pre>
+          </div>
+        </div>
+
+        <!-- 16 ABC 分類 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>16. ABC 分類</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>ABC分類 =
+SWITCH(
+    TRUE(),
+    [ABC_累計比例] <= 0.80, "A",
+    [ABC_累計比例] <= 0.95, "B",
+    "C"
+)</pre>
+          </div>
+        </div>
+
+        <!-- 17 供需失衡指數 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>17. 供需失衡指數</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>供需失衡指數 =
+VAR InQty  = SUM(Inventory[InQty])
+VAR OutQty = SUM(Inventory[OutQty])
+VAR Total  = InQty + OutQty
+RETURN
+    IF(Total = 0, 0,
+        ABS(DIVIDE(InQty - OutQty, Total, 0))
+    )</pre>
+          </div>
+        </div>
+
+        <!-- 18 FIFO 加權平均庫齡 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>18. FIFO 加權平均庫齡</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>FIFO加權平均庫齡 =
+DIVIDE(
+    SUMX(
+        FIFOBatch,
+        FIFOBatch[RemainQty] *
+        DATEDIFF(FIFOBatch[InDate], TODAY(), DAY)
+    ),
+    SUM(FIFOBatch[RemainQty]),
+    0
+)</pre>
+          </div>
+        </div>
+
+        <!-- 19 背離信號 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>19. 背離信號</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>背離信號 =
+VAR DSI_now  = [DSI]
+VAR DSI_3m   = CALCULATE([DSI], DATESINPERIOD(DateTable[Date], MAX(DateTable[Date]), -90, DAY))
+VAR Sales_now = SUM(Sales[Qty])
+VAR Sales_3m  = CALCULATE(SUM(Sales[Qty]), DATESINPERIOD(DateTable[Date], MAX(DateTable[Date]), -90, DAY))
+RETURN
+    IF(DSI_now > DSI_3m * 1.2 && Sales_now < Sales_3m * 0.9,
+        "⚠ 高庫存低銷量 背離",
+    IF(DSI_now < DSI_3m * 0.8 && Sales_now > Sales_3m * 1.1,
+        "✓ 低庫存高銷量 健康",
+        "— 正常範圍"
+    ))</pre>
+          </div>
+        </div>
+
+        <!-- 20 安全庫存 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>20. 安全庫存 (Safety Stock)</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>-- Z 因子：90%=1.28，95%=1.645，99%=2.326
+安全庫存 =
+VAR Z = 1.645  -- 95% 服務水準
+VAR σ_demand  = STDEV.P(Sales[DailySales])
+VAR σ_lead    = STDEV.P(Supplier[LeadDays])
+VAR avg_lead  = AVERAGE(Supplier[LeadDays])
+VAR avg_daily = AVERAGE(Sales[DailySales])
+RETURN
+    Z * SQRT(avg_lead * σ_demand^2 + avg_daily^2 * σ_lead^2)</pre>
+          </div>
+        </div>
+
+        <!-- 21 ROP -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>21. 再訂購點 ROP</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>ROP =
+    AVERAGE(Sales[DailySales]) * AVERAGE(Supplier[LeadDays])
+    + [安全庫存]</pre>
+          </div>
+        </div>
+
+        <!-- 22 EOQ -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>22. 經濟訂購量 EOQ</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>EOQ =
+VAR D = SUM(Sales[AnnualQty])      -- 年需求量
+VAR S = 500                         -- 每次訂購成本（元）
+VAR H = [加權平均成本] * 0.25       -- 年單位持有成本
+RETURN SQRT(DIVIDE(2 * D * S, H, 0))</pre>
+          </div>
+        </div>
+
+        <!-- 23 Fisher 比值 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>23. Fisher 週期性比值</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>-- Fisher 週期性檢定：判斷銷售是否具顯著季節性
+-- 計算需在 Python/Excel 中完成 DFT，再匯入 Power BI
+Fisher比值 =
+DIVIDE(
+    MAX(Fourier[MaxAmplitude]),
+    AVERAGE(Fourier[AllAmplitudes]),
+    0
+)
+-- 臨界值（n=12月）約 6.5，>6.5 表示具顯著季節性</pre>
+          </div>
+        </div>
+
+        <!-- 24 季節指數 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>24. 季節指數 (Seasonal Index)</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>季節指數 =
+VAR AvgMonthly = AVERAGEX(VALUES(DateTable[YearMonth]), CALCULATE(SUM(Sales[Qty])))
+VAR ThisMonth  = CALCULATE(SUM(Sales[Qty]))
+RETURN DIVIDE(ThisMonth, AvgMonthly, 1)</pre>
+          </div>
+        </div>
+
+        <!-- 25 複合預測模型 -->
+        <div class="accordion-item">
+          <div class="accordion-header" onclick="toggleAccordion(this)">
+            <span>25. 複合預測模型 (3M MA + 趨勢 + 季節)</span><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          </div>
+          <div class="accordion-body">
+            <pre>移動平均3M =
+AVERAGEX(
+    DATESINPERIOD(DateTable[Date], MAX(DateTable[Date]), -3, MONTH),
+    CALCULATE(SUM(Sales[Qty]))
+)
+
+移動平均6M =
+AVERAGEX(
+    DATESINPERIOD(DateTable[Date], MAX(DateTable[Date]), -6, MONTH),
+    CALCULATE(SUM(Sales[Qty]))
+)
+
+複合預測 =
+VAR ma3  = [移動平均3M]
+VAR ma6  = [移動平均6M]
+VAR si   = [季節指數]
+VAR base = (ma3 * 0.6 + ma6 * 0.4)  -- 加權組合
+RETURN base * si                      -- 乘以季節指數調整</pre>
+          </div>
+        </div>
+
+      </div><!-- /dax-accordion -->
+    </div>
+
+  </div><!-- /tab-settings -->
+
+</main>
+
+<script>
+
+// ══════════════════════════════════════════════════════
+// 庫存分析智能儀表板 V3.0 — JavaScript
+// ══════════════════════════════════════════════════════
+
+// ══ 1. CONSTANTS & STATE ══
+const CFG = {
+    DAYS: 180,
+    ORDER_COST: 500,
+    HOLDING_RATE: 0.25,
+    SVC_LEVEL_Z: 1.645,
+    ABC_A: 0.5, ABC_B: 0.7,
+    XYZ_X: 0.5, XYZ_Y: 1.0,
+    LOSS_RATES: [0, 0, 0.10, 0.30, 0.60],
+    ALERT: { DSI_MAX: 90, AGING_MAX: 60, GMROI_MIN: 0.5, IMB_MAX: 0.10, STOCKOUT_MAX: 5, EOQ_DEV_MAX: 0.30 }
+};
+let rawData = [], aggregatedData = {}, myCharts = {}, renderedPages = new Set();
+let darkMode = localStorage.getItem('v3DarkMode') !== 'false';
+let currentPage = 1, rowsPerPage = 20, filteredItems = [];
+let svcLevel = 1.645;
+let ssrMode = 'long';
+let abcMode = 'relative';
+let snapshots = JSON.parse(localStorage.getItem('v3Snapshots') || '[]');
+let alertCfg = { dsiMax: 90, agingMax: 60, gmroiMin: 0.5, imbMax: 0.10 };
+let whatIfParams = { growth: 10, svc: 95, hold: 25, lead: 0 };
+
+// ── Global Filter State ──
+let globalFilter = { years: new Set(), categories: new Set(), search: '' };
+let _rawDataFull = [];      // always holds the complete unfiltered dataset
+let _skipRawUpdate = false; // flag to prevent processData from overwriting rawData during filter apply
+let _filterDebounce = null;
+
+// ══ 2. DEMO DATA GENERATOR ══
+function generateDemoData() {
+    const categories = ['電子產品','服飾配件','家用電器','家具寢具','玩具文具'];
+    const productNames = {
+        '電子產品': ['智慧型手機','藍牙耳機','平板電腦','智慧手錶','無線充電器','筆記型電腦','電競鍵盤','4K顯示器','USB集線器','網路攝影機'],
+        '服飾配件': ['男士西裝','女士洋裝','牛仔褲','棉質T恤','皮革皮帶','太陽眼鏡','運動球鞋','羊毛圍巾','真皮手包','帆布背包'],
+        '家用電器': ['空氣清淨機','智慧冰箱','滾筒洗衣機','微波爐','電磁爐','掃地機器人','電熱水瓶','電動牙刷','除濕機','烤箱'],
+        '家具寢具': ['雙人記憶床墊','木質書架','L型沙發','辦公椅','衣帽架','棉麻床單組','遮光窗簾','儲物抽屜櫃','折疊餐桌','浴室置物架'],
+        '玩具文具': ['積木套組','遙控飛機','繪圖水彩組','兒童益智拼圖','鋼筆禮盒','筆記本套裝','桌遊卡牌','手工黏土','彩色鉛筆','文具收納盒']
+    };
+    const unitCostBase = { '電子產品':800, '服飾配件':200, '家用電器':600, '家具寢具':400, '玩具文具':80 };
+    const leadTimeBase = { '電子產品':21, '服飾配件':14, '家用電器':30, '家具寢具':45, '玩具文具':7 };
+
+    const startDate = new Date('2025-09-16');
+    const rows = [];
+    let pid = 1001;
+
+    // Simple seeded random
+    let seed = 42;
+    function rnd() { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; }
+
+    categories.forEach(cat => {
+        const names = productNames[cat];
+        for (let pi = 0; pi < 10; pi++) {
+            const productId = 'P' + pid++;
+            const baseCost = unitCostBase[cat] * (0.7 + rnd() * 0.6);
+            const unitCost = Math.round(baseCost * 10) / 10;
+            const unitPrice = Math.round(unitCost * (1.3 + rnd() * 1.2) * 10) / 10;
+            const baseDemand = 2 + rnd() * 8;
+            const leadTime = leadTimeBase[cat] + Math.floor((rnd() - 0.5) * 10);
+            let inventory = Math.floor(50 + rnd() * 150);
+            let aging = Math.floor(rnd() * 30);
+
+            for (let d = 0; d < CFG.DAYS; d++) {
+                const date = new Date(startDate);
+                date.setDate(startDate.getDate() + d);
+                const dateStr = date.toISOString().slice(0,10);
+                const month = date.getMonth() + 1;
+                const seasonFactor = 1 + 0.3 * Math.sin((month - 3) * Math.PI / 6);
+                const dailyDemand = baseDemand * seasonFactor;
+
+                let in_qty = 0;
+                if (rnd() < 0.05 || inventory < 10) {
+                    in_qty = Math.floor(50 + rnd() * 150);
+                    inventory += in_qty;
+                    aging = Math.max(0, aging - Math.floor(aging * 0.4));
+                }
+
+                let rawDemand = dailyDemand * (0.5 + rnd());
+                let out_qty = Math.min(inventory, Math.max(0, Math.floor(rawDemand)));
+                inventory = Math.max(0, inventory - out_qty);
+                aging = in_qty > 0 ? aging : Math.min(aging + 1, 365);
+
+                rows.push({
+                    ProductID: productId,
+                    ProductName: names[pi],
+                    Category: cat,
+                    Date: dateStr,
+                    in_qty: in_qty,
+                    out_qty: out_qty,
+                    current_inventory: inventory,
+                    aging: aging,
+                    UnitCost: unitCost,
+                    UnitPrice: unitPrice,
+                    LeadTime: leadTime
+                });
+            }
+        }
+    });
+
+    processData(rows);
+}
+
+// ══ 3. PROCESS DATA ══
+function processData(raw) {
+    if (!_skipRawUpdate) { rawData = raw; _rawDataFull = raw; }
+    const ps = {}, ms = {};
+
+    raw.forEach(r => {
+        const pid = r.ProductID;
+        if (!ps[pid]) {
+            ps[pid] = {
+                id: pid, name: r.ProductName || pid, category: r.Category || '未分類',
+                totalSales: 0, totalCOGS: 0, totalIn: 0, totalRev: 0,
+                totalCurrent: 0, totalCurrentValue: 0,
+                agingSum: 0, agingCount: 0,
+                leadTime: r.LeadTime || 14,
+                unitCost: r.UnitCost || 100,
+                unitPrice: r.UnitPrice || 150,
+                monthlyOut: {}, dailySalesArr: [], batches: []
+            };
+        }
+        const p = ps[pid];
+        p.totalSales += r.out_qty || 0;
+        p.totalCOGS += (r.out_qty || 0) * (r.UnitCost || 0);
+        p.totalIn += r.in_qty || 0;
+        p.totalRev += (r.out_qty || 0) * (r.UnitPrice || 0);
+        p.agingSum += (r.aging || 0);
+        p.agingCount++;
+        p.dailySalesArr.push(r.out_qty || 0);
+        if ((r.in_qty || 0) > 0) {
+            p.batches.push({ date: r.Date, qty: r.in_qty, cost: r.UnitCost || 0 });
+        }
+        const mo = r.Date ? r.Date.slice(0,7) : '2025-09';
+        p.monthlyOut[mo] = (p.monthlyOut[mo] || 0) + (r.out_qty || 0);
+
+        if (!ms[mo]) ms[mo] = { invVal:0, cogs:0, rev:0, count:0, totalIn:0, totalOut:0 };
+        ms[mo].invVal += (r.current_inventory || 0) * (r.UnitCost || 0);
+        ms[mo].cogs += (r.out_qty || 0) * (r.UnitCost || 0);
+        ms[mo].rev += (r.out_qty || 0) * (r.UnitPrice || 0);
+        ms[mo].count++;
+        ms[mo].totalIn += r.in_qty || 0;
+        ms[mo].totalOut += r.out_qty || 0;
+    });
+
+    const latestByPid = {};
+    raw.forEach(r => {
+        if (!latestByPid[r.ProductID] || r.Date > latestByPid[r.ProductID].Date) {
+            latestByPid[r.ProductID] = r;
+        }
+    });
+    Object.keys(ps).forEach(pid => {
+        const lr = latestByPid[pid];
+        ps[pid].totalCurrent = lr ? (lr.current_inventory || 0) : 0;
+        ps[pid].totalCurrentValue = ps[pid].totalCurrent * (ps[pid].unitCost || 0);
+        ps[pid].avgAging = ps[pid].agingCount > 0 ? ps[pid].agingSum / ps[pid].agingCount : 0;
+    });
+
+    let arr = Object.values(ps);
+    const totalVal = arr.reduce((s,p) => s + p.totalCurrentValue, 0);
+    const totalCOGS = arr.reduce((s,p) => s + p.totalCOGS, 0);
+
+    arr.sort((a,b) => b.totalCurrentValue - a.totalCurrentValue);
+    let cumVal = 0;
+    const lossRates = readLossRates();
+    arr.forEach(p => {
+        cumVal += p.totalCurrentValue;
+        p.abcPct = totalVal > 0 ? cumVal / totalVal : 0;
+        p.abc = p.abcPct <= CFG.ABC_A ? 'A' : (p.abcPct <= CFG.ABC_B ? 'B' : 'C');
+        p.valPct = totalVal > 0 ? p.totalCurrentValue / totalVal : 0;
+        p.cogsPct = totalCOGS > 0 ? p.totalCOGS / totalCOGS : 0;
+        p.imbalance = p.valPct - p.cogsPct;
+
+        const mo = Object.values(p.monthlyOut || {});
+        const avg = mo.length > 0 ? mo.reduce((s,v)=>s+v,0)/mo.length : 0;
+        const std = Math.sqrt(mo.reduce((s,v)=>s+(v-avg)**2,0)/(mo.length||1));
+        p.coV = avg > 0 ? std/avg : 0;
+        p.xyz = p.coV < CFG.XYZ_X ? 'X' : (p.coV < CFG.XYZ_Y ? 'Y' : 'Z');
+        p.abcxyz = p.abc + p.xyz;
+
+        p.strFast = p.totalIn > 0 ? p.totalSales/p.totalIn : 0;
+        p.strSlow = (p.totalSales + p.totalCurrent) > 0 ? p.totalSales/(p.totalSales+p.totalCurrent) : 0;
+        p.strType = p.leadTime > 21 ? 'slow' : 'fast';
+        p.str = p.strType === 'slow' ? p.strSlow : p.strFast;
+
+        p.dailySalesAvg = p.totalSales / CFG.DAYS;
+        const dailyStd = p.dailySalesAvg * 0.3;
+        p.safetyStock = svcLevel * Math.sqrt(p.leadTime) * dailyStd;
+        p.rop = p.dailySalesAvg * p.leadTime + p.safetyStock;
+
+        p.annualDemand = p.dailySalesAvg * 365;
+        const hcRate = CFG.HOLDING_RATE;
+        const hc = p.unitCost * hcRate;
+        p.eoq = hc > 0 ? Math.sqrt(2 * p.annualDemand * CFG.ORDER_COST / hc) : 0;
+        const avgBatch = p.batches.length > 0
+            ? p.batches.reduce((s,b)=>s+b.qty,0)/p.batches.length
+            : (p.eoq || 100);
+        p.eoqDeviation = p.eoq > 0 ? Math.abs(avgBatch - p.eoq) / p.eoq : 0;
+
+        p.grossMargin = p.unitPrice > 0 ? (p.unitPrice - p.unitCost)/p.unitPrice : 0;
+        p.gmroi = p.totalCurrentValue > 0 ? (p.totalRev * p.grossMargin)/p.totalCurrentValue : 0;
+
+        const a = p.avgAging;
+        p.agingBucket = a<=30?0:(a<=60?1:(a<=90?2:(a<=120?3:4)));
+        p.lossRate = lossRates[p.agingBucket];
+        p.estimatedLoss = p.totalCurrentValue * p.lossRate;
+    });
+
+    const mKeys = Object.keys(ms).sort();
+    mKeys.forEach((mo, i) => {
+        const m = ms[mo];
+        m.avgInv = m.count > 0 ? m.invVal / m.count : 0;
+        m.turnover = m.avgInv > 0 ? m.cogs / m.avgInv : 0;
+        m.dsi = m.turnover > 0 ? 30/m.turnover : 30;
+        m.ssrLong = m.rev > 0 ? m.avgInv / m.rev : 0;
+        const prevAvg = i > 0 ? ms[mKeys[i-1]].avgInv : m.avgInv;
+        m.ssrShort = m.totalOut > 0 ? (prevAvg + m.totalIn) / m.totalOut : 0;
+        m.growth = i > 0 && ms[mKeys[i-1]].cogs > 0 ? (m.cogs - ms[mKeys[i-1]].cogs)/ms[mKeys[i-1]].cogs : 0;
+        if (i >= 2) m.ma3 = (ms[mKeys[i]].totalOut + ms[mKeys[i-1]].totalOut + ms[mKeys[i-2]].totalOut) / 3;
+        if (i >= 5) m.ma6 = mKeys.slice(i-5, i+1).reduce((s,k) => s + ms[k].totalOut, 0) / 6;
+    });
+
+    const monthlyGroups = {};
+    mKeys.forEach(mo => {
+        const mn = parseInt(mo.split('-')[1]);
+        if (!monthlyGroups[mn]) monthlyGroups[mn] = [];
+        monthlyGroups[mn].push(ms[mo].totalOut);
+    });
+    const grandAvgOut = mKeys.length > 0 ? mKeys.reduce((s,k) => s + ms[k].totalOut, 0) / mKeys.length : 1;
+    const seasonalIndex = {};
+    for (let m = 1; m <= 12; m++) {
+        const vals = monthlyGroups[m] || [grandAvgOut];
+        seasonalIndex[m] = (vals.reduce((s,v)=>s+v,0)/vals.length) / (grandAvgOut||1);
+    }
+
+    const monthAvgs = Object.values(monthlyGroups).map(v => v.reduce((s,x)=>s+x,0)/v.length);
+    const mGrand = monthAvgs.reduce((s,v)=>s+v,0) / (monthAvgs.length||1);
+    const monthStd = Math.sqrt(monthAvgs.reduce((s,v)=>s+(v-mGrand)**2,0)/(monthAvgs.length||1));
+    const yearVals = mKeys.map(k => ms[k].totalOut);
+    const yGrand = yearVals.reduce((s,v)=>s+v,0)/(yearVals.length||1);
+    const yearStd = Math.sqrt(yearVals.reduce((s,v)=>s+(v-yGrand)**2,0)/(yearVals.length||1));
+    const fisherRatio = yearStd > 0 ? monthStd/yearStd : 0;
+
+    const qualityIssues = checkDataQuality(raw);
+
+    aggregatedData = { products: arr, monthly: ms, mKeys, totalVal, totalCOGS, seasonalIndex, fisherRatio, qualityIssues };
+    updateDashboard();
+}
+
+function readLossRates() {
+    const get = (id, def) => (parseFloat(document.getElementById(id)?.value) || def) / 100;
+    return [get('loss-rate-0',0), get('loss-rate-30',5), get('loss-rate-60',15), get('loss-rate-90',30), get('loss-rate-180',60)];
+}
+
+// ══ 4. UPDATE DASHBOARD ══
+function updateDashboard() {
+    if (!aggregatedData.products) return;
+    const arr = aggregatedData.products;
+    const totalInv = aggregatedData.totalVal || 0;
+    const totalCOGS = aggregatedData.totalCOGS || 0;
+
+    const aging90Val = arr.filter(p=>p.avgAging>90).reduce((s,p)=>s+p.totalCurrentValue,0);
+    const aging90Pct = totalInv > 0 ? aging90Val/totalInv*100 : 0;
+    const dsi = totalCOGS > 0 ? (totalInv / totalCOGS) * CFG.DAYS : 0;
+    const turnover = totalInv > 0 && totalCOGS > 0 ? totalCOGS / totalInv * (365/CFG.DAYS) : 0;
+    const stockouts = arr.filter(p => p.totalCurrent < p.rop).length;
+    const totalGMROI = totalInv > 0 ? arr.reduce((s,p) => s + p.gmroi * p.totalCurrentValue, 0) / totalInv : 0;
+    const avgSTR = arr.reduce((s,p) => s + p.str * p.valPct, 0);
+
+    let health = 100;
+    if (dsi > 90) health -= 20; else if (dsi > 60) health -= 10;
+    if (aging90Pct > 30) health -= 15; else if (aging90Pct > 15) health -= 7;
+    if (stockouts > 5) health -= 10; else if (stockouts > 2) health -= 5;
+    if (totalGMROI < 0.5) health -= 15; else if (totalGMROI < 1) health -= 10;
+    health = Math.max(0, Math.min(100, health));
+
+    const setText = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+    const setWidth = (id, pct) => { const el=document.getElementById(id); if(el) el.style.width=Math.min(100,Math.max(0,pct))+'%'; };
+
+    setText('kpi-total-inv', (totalInv/10000).toFixed(1));
+    setWidth('pb-total-inv', Math.min(100, (totalInv/10000)/500*100));
+    setText('trend-total-inv', totalInv > 0 ? '庫存在管' : '無資料');
+
+    setText('kpi-dsi', dsi.toFixed(1));
+    setWidth('pb-dsi', Math.min(100, dsi/120*100));
+    setText('trend-dsi', dsi > 90 ? '⚠ 偏高' : dsi < 30 ? '✓ 良好' : '— 正常');
+
+    setText('kpi-aging', aging90Pct.toFixed(1));
+    setWidth('pb-aging', aging90Pct);
+    setText('trend-aging', aging90Pct > 20 ? '⚠ 注意' : '✓ 正常');
+
+    setText('kpi-health', health.toFixed(0));
+    setWidth('pb-health', health);
+    setText('trend-health', health >= 80 ? '✓ 健康' : health >= 60 ? '— 待改善' : '⚠ 警示');
+
+    setText('kpi-turnover', turnover.toFixed(2));
+    setWidth('pb-turnover', Math.min(100, turnover/10*100));
+    setText('trend-turnover', turnover > 6 ? '✓ 高效' : '— 普通');
+
+    setText('kpi-str', avgSTR.toFixed(2));
+    setWidth('pb-str', Math.min(100, avgSTR*100));
+    setText('trend-str', avgSTR > 0.7 ? '✓ 快銷' : '— 滯銷');
+
+    setText('kpi-gmroi', totalGMROI.toFixed(2));
+    setWidth('pb-gmroi', Math.min(100, totalGMROI/3*100));
+    setText('trend-gmroi', totalGMROI > 1.5 ? '✓ 優良' : totalGMROI > 0.5 ? '— 正常' : '⚠ 偏低');
+
+    setText('kpi-stockouts', stockouts);
+    setWidth('pb-stockouts', Math.min(100, stockouts/Math.max(arr.length,1)*100));
+    setText('trend-stockouts', stockouts > 5 ? '⚠ 過多' : '✓ 正常');
+
+    setText('supply-gmroi', totalGMROI.toFixed(2));
+    const stockoutLoss = arr.filter(p=>p.totalCurrent<p.rop).reduce((s,p)=>s+p.dailySalesAvg*p.unitPrice*p.leadTime,0);
+    setText('supply-stockout-loss', (stockoutLoss/10000).toFixed(1));
+    const avgLead = arr.reduce((s,p)=>s+p.leadTime,0)/(arr.length||1);
+    setText('supply-avg-leadtime', avgLead.toFixed(1));
+
+    aggregatedData._health = health;
+    aggregatedData._dsi = dsi;
+    aggregatedData._turnover = turnover;
+    aggregatedData._stockouts = stockouts;
+    aggregatedData._gmroi = totalGMROI;
+    aggregatedData._str = avgSTR;
+    aggregatedData._aging90Pct = aging90Pct;
+
+    renderedPages.clear();
+    renderCurrentTab();
+    generateTextReport();
+    renderSnapshotsList();
+    // Update filter dropdowns only when loading fresh data (not during a filter apply)
+    if (!_skipRawUpdate) updateFilterUI();
+}
+
+// ══ 5. TAB NAVIGATION ══
+function renderCurrentTab() {
+    const active = document.querySelector('.tab-content.active');
+    if (!active) return;
+    const id = active.id;
+    if (renderedPages.has(id)) return;
+    renderedPages.add(id);
+    const map = {
+        'tab-overview': renderOverview,
+        'tab-trend': renderTrend,
+        'tab-structure': renderStructure,
+        'tab-aging': renderAging,
+        'tab-forecast': renderForecast,
+        'tab-supply': renderSupply,
+        'tab-items': renderItems,
+        'tab-actions': renderActions,
+        'tab-whatif': renderWhatIf,
+        'tab-eoq': renderEOQ,
+        'tab-fifo': renderFIFO,
+        'tab-quality': renderQuality,
+        'tab-report': renderReport,
+        'tab-settings': renderSettings
+    };
+    if (map[id]) map[id]();
+}
+
+// ══ 6. CHART HELPER ══
+function cc(id, type, data, opts) {
+    if (myCharts[id]) { myCharts[id].destroy(); delete myCharts[id]; }
+    const canvas = document.getElementById(id);
+    if (!canvas) return null;
+    const isDark = !document.body.classList.contains('light-mode');
+    const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+    const tickColor = isDark ? '#94a3b8' : '#64748b';
+    const isCircular = type === 'pie' || type === 'doughnut' || type === 'polarArea';
+    const defaults = {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: tickColor, font:{size:10}, boxWidth:12 } }, tooltip: { mode:'index', intersect:false } },
+        scales: type === 'radar' ? {
+            r: { ticks:{color:tickColor,font:{size:9},backdropColor:'transparent'}, pointLabels:{color:tickColor,font:{size:10}}, grid:{color:gridColor}, angleLines:{color:gridColor} }
+        } : isCircular ? {} : {
+            x: { ticks:{color:tickColor,font:{size:9}}, grid:{color:gridColor} },
+            y: { ticks:{color:tickColor,font:{size:9}}, grid:{color:gridColor} }
+        }
+    };
+    const mergedOpts = deepMerge(defaults, opts || {});
+    myCharts[id] = new Chart(canvas, { type, data, options: mergedOpts });
+    return myCharts[id];
+}
+
+function deepMerge(target, source) {
+    const out = Object.assign({}, target);
+    for (const key in source) {
+        if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+            out[key] = deepMerge(target[key] || {}, source[key]);
+        } else {
+            out[key] = source[key];
+        }
+    }
+    return out;
+}
+
+const PALETTE = ['#6366f1','#22d3ee','#10b981','#f59e0b','#f43f5e','#8b5cf6','#06b6d4','#84cc16','#fb923c','#ec4899'];
+const CAT_COLORS = {'電子產品':'#6366f1','服飾配件':'#22d3ee','家用電器':'#10b981','家具寢具':'#f59e0b','玩具文具':'#f43f5e'};
+
+// ══ GLOBAL FILTER FUNCTIONS ══
+
+function toggleFilterDropdown(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const isVisible = el.style.display !== 'none';
+    // close all dropdowns first
+    document.querySelectorAll('.filter-dropdown').forEach(d => { d.style.display = 'none'; });
+    if (!isVisible) {
+        el.style.display = 'block';
+        // close on outside click (one-shot listener)
+        const btn = el.previousElementSibling;
+        setTimeout(() => {
+            const close = (e) => {
+                if (!el.contains(e.target) && !(btn && btn.contains(e.target))) {
+                    el.style.display = 'none';
+                }
+                document.removeEventListener('click', close);
+            };
+            document.addEventListener('click', close);
+        }, 0);
+    }
+}
+
+function updateFilterUI() {
+    if (!_rawDataFull.length) return;
+    const allYears = [...new Set(_rawDataFull.map(r => r.Date.slice(0, 4)))].sort();
+    const allCats  = [...new Set(_rawDataFull.map(r => r.Category))].sort();
+
+    // ── Year dropdown ──
+    const yearDrop = document.getElementById('year-dropdown');
+    if (yearDrop) {
+        yearDrop.innerHTML = allYears.map(y =>
+            '<label><input type="checkbox" value="' + y + '" class="gf-year" ' +
+            (globalFilter.years.size === 0 || globalFilter.years.has(y) ? 'checked' : '') +
+            '> ' + y + ' 年</label>'
+        ).join('');
+        yearDrop.querySelectorAll('.gf-year').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const checked = new Set([...yearDrop.querySelectorAll('.gf-year:checked')].map(c => c.value));
+                globalFilter.years = checked.size === allYears.length ? new Set() : checked;
+                triggerGlobalFilter();
+            });
+        });
+    }
+
+    // ── Category dropdown ──
+    const catDrop = document.getElementById('cat-dropdown');
+    if (catDrop) {
+        catDrop.innerHTML = allCats.map(c =>
+            '<label><input type="checkbox" value="' + c + '" class="gf-cat" ' +
+            (globalFilter.categories.size === 0 || globalFilter.categories.has(c) ? 'checked' : '') +
+            '> ' + c + '</label>'
+        ).join('');
+        catDrop.querySelectorAll('.gf-cat').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const checked = new Set([...catDrop.querySelectorAll('.gf-cat:checked')].map(c => c.value));
+                globalFilter.categories = checked.size === allCats.length ? new Set() : checked;
+                triggerGlobalFilter();
+            });
+        });
+    }
+
+    _updateFilterBadge();
+}
+
+function _updateFilterBadge() {
+    const activeCount = (globalFilter.years.size > 0 ? 1 : 0) +
+                        (globalFilter.categories.size > 0 ? 1 : 0) +
+                        (globalFilter.search ? 1 : 0);
+
+    const badge    = document.getElementById('filter-badge');
+    const clearBtn = document.getElementById('btn-clear-filter');
+    const yearLbl  = document.getElementById('year-filter-label');
+    const catLbl   = document.getElementById('cat-filter-label');
+    const yearBtn  = document.getElementById('year-filter-btn');
+    const catBtn   = document.getElementById('cat-filter-btn');
+
+    if (yearLbl) {
+        if      (globalFilter.years.size === 0) yearLbl.textContent = '年度：全部';
+        else if (globalFilter.years.size === 1) yearLbl.textContent = '年度：' + [...globalFilter.years][0];
+        else yearLbl.textContent = '年度：' + globalFilter.years.size + ' 年';
+    }
+    if (catLbl) {
+        if      (globalFilter.categories.size === 0) catLbl.textContent = '品類：全部';
+        else if (globalFilter.categories.size === 1) catLbl.textContent = '品類：' + [...globalFilter.categories][0];
+        else catLbl.textContent = '品類：' + globalFilter.categories.size + ' 項';
+    }
+    if (yearBtn) yearBtn.classList.toggle('active-filter', globalFilter.years.size > 0);
+    if (catBtn)  catBtn.classList.toggle('active-filter', globalFilter.categories.size > 0);
+
+    if (badge) {
+        badge.style.display = activeCount > 0 ? '' : 'none';
+        badge.textContent = '已篩選 ' + activeCount + ' 項條件';
+    }
+    if (clearBtn) clearBtn.style.display = activeCount > 0 ? '' : 'none';
+}
+
+function triggerGlobalFilter() {
+    clearTimeout(_filterDebounce);
+    _filterDebounce = setTimeout(applyGlobalFilter, 300);
+}
+
+function applyGlobalFilter() {
+    if (!_rawDataFull.length) return;
+
+    const filtered = _rawDataFull.filter(r => {
+        if (globalFilter.years.size > 0 && !globalFilter.years.has(r.Date.slice(0, 4))) return false;
+        if (globalFilter.categories.size > 0 && !globalFilter.categories.has(r.Category)) return false;
+        if (globalFilter.search) {
+            const q = globalFilter.search.toLowerCase();
+            const name = (r.ProductName || '').toLowerCase();
+            const id   = (r.ProductID || '').toLowerCase();
+            if (!name.includes(q) && !id.includes(q)) return false;
+        }
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        alert('篩選結果無資料，請調整條件');
+        return;
+    }
+
+    _updateFilterBadge();
+    _skipRawUpdate = true;
+    processData(filtered);
+    _skipRawUpdate = false;
+}
+
+function clearGlobalFilter() {
+    globalFilter = { years: new Set(), categories: new Set(), search: '' };
+    const searchEl = document.getElementById('global-search');
+    if (searchEl) searchEl.value = '';
+    document.querySelectorAll('.gf-year, .gf-cat').forEach(cb => { cb.checked = true; });
+    _updateFilterBadge();
+    processData(_rawDataFull);  // restore full data
+}
+
+
+
+// ══ 7. RENDER: OVERVIEW ══
+function renderOverview() {
+    if (!aggregatedData.products) return;
+    const arr = aggregatedData.products;
+    const ms = aggregatedData.monthly || {};
+    const mKeys = aggregatedData.mKeys || [];
+
+    // Trend chart - monthly inventory value
+    const trendLabels = mKeys.map(k => k.slice(5));
+    const trendVals = mKeys.map(k => (ms[k].avgInv || 0) / 10000);
+    cc('chartTrendOverview', 'line', {
+        labels: trendLabels,
+        datasets: [{
+            label: '庫存金額(萬元)',
+            data: trendVals,
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99,102,241,0.12)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointBackgroundColor: '#6366f1'
+        }, {
+            label: 'COGS(萬元)',
+            data: mKeys.map(k => (ms[k].cogs || 0) / 10000),
+            borderColor: '#22d3ee',
+            backgroundColor: 'rgba(34,211,238,0.08)',
+            fill: false,
+            tension: 0.4,
+            pointRadius: 3,
+            pointBackgroundColor: '#22d3ee'
+        }]
+    }, {
+        plugins: { legend: { position: 'top' } },
+        scales: {
+            y: { ticks: { callback: v => v.toFixed(0) + '萬' } }
+        }
+    });
+
+    // Category donut
+    const catTotals = {};
+    arr.forEach(p => { catTotals[p.category] = (catTotals[p.category] || 0) + p.totalCurrentValue; });
+    const cats = Object.keys(catTotals);
+    cc('chartCategoryOverview', 'doughnut', {
+        labels: cats,
+        datasets: [{
+            data: cats.map(c => catTotals[c]),
+            backgroundColor: cats.map(c => CAT_COLORS[c] || '#6366f1'),
+            borderWidth: 2,
+            borderColor: 'rgba(0,0,0,0.2)'
+        }]
+    }, {
+        plugins: {
+            legend: { position: 'bottom' },
+            tooltip: { callbacks: { label: ctx => ctx.label + ': ' + (ctx.raw/10000).toFixed(1) + '萬元' } }
+        },
+        cutout: '60%'
+    });
+}
+
+// ══ 8. RENDER: TREND ══
+function renderTrend() {
+    if (!aggregatedData.monthly) return;
+    const ms = aggregatedData.monthly;
+    const mKeys = aggregatedData.mKeys || [];
+    const labels = mKeys.map(k => k.slice(5));
+
+    // DSI / Turnover dual axis
+    cc('chartTurnover', 'bar', {
+        labels,
+        datasets: [{
+            label: 'DSI(天)',
+            data: mKeys.map(k => (ms[k].dsi || 0).toFixed(1)),
+            backgroundColor: 'rgba(99,102,241,0.6)',
+            yAxisID: 'y'
+        }, {
+            label: '周轉率(次/月)',
+            data: mKeys.map(k => (ms[k].turnover || 0).toFixed(2)),
+            type: 'line',
+            borderColor: '#22d3ee',
+            backgroundColor: 'transparent',
+            pointRadius: 4,
+            yAxisID: 'y1'
+        }]
+    }, {
+        scales: {
+            y: { position:'left', ticks:{ callback: v => v+'天' } },
+            y1: { position:'right', grid:{ drawOnChartArea:false }, ticks:{ callback: v => v+'次' } }
+        },
+        plugins: { legend:{ position:'top' } }
+    });
+
+    // SSR chart
+    renderSSRChart();
+
+    // Growth chart
+    const growthData = mKeys.map(k => ((ms[k].growth || 0) * 100).toFixed(1));
+    cc('chartGrowth', 'bar', {
+        labels,
+        datasets: [{
+            label: 'MoM成長率(%)',
+            data: growthData,
+            backgroundColor: growthData.map(v => parseFloat(v) >= 0 ? 'rgba(16,185,129,0.7)' : 'rgba(244,63,94,0.7)'),
+            borderRadius: 3
+        }]
+    }, {
+        scales: { y: { ticks:{ callback: v => v+'%' } } },
+        plugins: { legend:{ display:false } }
+    });
+
+    // Moving averages
+    const actualData = mKeys.map(k => ms[k].totalOut || 0);
+    const ma3Data = mKeys.map((k,i) => ms[k].ma3 || null);
+    const ma6Data = mKeys.map((k,i) => ms[k].ma6 || null);
+    cc('chartMA', 'line', {
+        labels,
+        datasets: [{
+            label: '實際出庫量',
+            data: actualData,
+            borderColor: '#94a3b8',
+            backgroundColor: 'rgba(148,163,184,0.1)',
+            fill: false,
+            pointRadius: 2
+        }, {
+            label: '3M MA',
+            data: ma3Data,
+            borderColor: '#6366f1',
+            backgroundColor: 'transparent',
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 2,
+            tension: 0.4,
+            spanGaps: true
+        }, {
+            label: '6M MA',
+            data: ma6Data,
+            borderColor: '#f59e0b',
+            backgroundColor: 'transparent',
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 2,
+            tension: 0.4,
+            spanGaps: true
+        }]
+    }, {
+        plugins: { legend:{ position:'top' } }
+    });
+}
+
+function renderSSRChart() {
+    const ms = aggregatedData.monthly;
+    const mKeys = aggregatedData.mKeys || [];
+    const labels = mKeys.map(k => k.slice(5));
+    const isLong = ssrMode === 'long';
+    const ssrData = mKeys.map(k => (isLong ? (ms[k].ssrLong||0) : (ms[k].ssrShort||0)).toFixed(3));
+    cc('chartSSR', 'line', {
+        labels,
+        datasets: [{
+            label: isLong ? '存銷比(長週期)' : '存銷比(短週期)',
+            data: ssrData,
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16,185,129,0.1)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointBackgroundColor: '#10b981'
+        }]
+    }, {
+        plugins: { legend:{ display:false } },
+        scales: { y: { ticks:{ callback: v => v.toFixed(2) } } }
+    });
+}
+
+// ══ 9. RENDER: STRUCTURE ══
+function renderStructure() {
+    if (!aggregatedData.products) return;
+    const arr = aggregatedData.products;
+
+    // ABC pie
+    const abcCounts = {A:0, B:0, C:0};
+    const abcVals = {A:0, B:0, C:0};
+    arr.forEach(p => { abcCounts[p.abc]++; abcVals[p.abc] += p.totalCurrentValue; });
+    cc('chartABC', 'pie', {
+        labels: ['A類', 'B類', 'C類'],
+        datasets: [{
+            data: [abcVals.A, abcVals.B, abcVals.C],
+            backgroundColor: ['#6366f1','#f59e0b','#94a3b8'],
+            borderWidth: 2,
+            borderColor: 'rgba(0,0,0,0.2)'
+        }]
+    }, {
+        plugins: {
+            legend:{ position:'bottom' },
+            tooltip:{ callbacks:{ label: ctx => ctx.label + ': ' + (ctx.raw/10000).toFixed(1) + '萬 (' + abcCounts[['A','B','C'][ctx.dataIndex]] + '品)' } }
+        }
+    });
+
+    // Imbalance scatter
+    const scatterData = arr.map(p => ({ x: (p.cogsPct*100).toFixed(2), y: (p.valPct*100).toFixed(2), r: 5 }));
+    cc('chartImbalance', 'scatter', {
+        datasets: [{
+            label: '品項',
+            data: scatterData,
+            backgroundColor: arr.map(p => p.imbalance > 0.05 ? 'rgba(244,63,94,0.7)' : p.imbalance < -0.05 ? 'rgba(34,211,238,0.7)' : 'rgba(99,102,241,0.7)'),
+            pointRadius: 5
+        }, {
+            label: '均衡線',
+            data: [{x:0,y:0},{x:10,y:10}],
+            type: 'line',
+            borderColor: 'rgba(255,255,255,0.3)',
+            borderDash: [4,4],
+            pointRadius: 0,
+            backgroundColor: 'transparent'
+        }]
+    }, {
+        scales: {
+            x: { title:{ display:true, text:'COGS佔比(%)', color:'#94a3b8' } },
+            y: { title:{ display:true, text:'庫存值佔比(%)', color:'#94a3b8' } }
+        },
+        plugins:{ legend:{ position:'top' } }
+    });
+
+    // Pareto
+    const sorted = [...arr].sort((a,b) => b.totalCurrentValue - a.totalCurrentValue);
+    const totalVal = aggregatedData.totalVal || 1;
+    let cum = 0;
+    const paretoLabels = sorted.slice(0,20).map(p => p.id);
+    const paretoVals = sorted.slice(0,20).map(p => (p.totalCurrentValue/10000).toFixed(1));
+    const paretoCum = sorted.slice(0,20).map(p => { cum += p.totalCurrentValue; return (cum/totalVal*100).toFixed(1); });
+    cc('chartPareto', 'bar', {
+        labels: paretoLabels,
+        datasets: [{
+            label: '庫存值(萬)',
+            data: paretoVals,
+            backgroundColor: 'rgba(99,102,241,0.7)',
+            yAxisID: 'y'
+        }, {
+            label: '累積%',
+            data: paretoCum,
+            type: 'line',
+            borderColor: '#f59e0b',
+            backgroundColor: 'transparent',
+            pointRadius: 3,
+            yAxisID: 'y1'
+        }]
+    }, {
+        scales: {
+            y: { position:'left' },
+            y1: { position:'right', min:0, max:100, ticks:{ callback: v=>v+'%' }, grid:{ drawOnChartArea:false } }
+        },
+        plugins:{ legend:{ position:'top' } }
+    });
+
+    // ABC-XYZ matrix
+    const cells = {};
+    ['AX','AY','AZ','BX','BY','BZ','CX','CY','CZ'].forEach(k => cells[k] = {count:0, val:0});
+    arr.forEach(p => {
+        const k = p.abcxyz;
+        if (cells[k]) { cells[k].count++; cells[k].val += p.totalCurrentValue; }
+    });
+    ['AX','AY','AZ','BX','BY','BZ','CX','CY','CZ'].forEach(k => {
+        const el = document.getElementById('cnt-' + k.toLowerCase());
+        if (el) el.textContent = cells[k].count + '品 / ' + (cells[k].val/10000).toFixed(0) + '萬';
+    });
+}
+
+// ══ 10. RENDER: AGING ══
+function renderAging() {
+    if (!aggregatedData.products) return;
+    const arr = aggregatedData.products;
+    const cats = [...new Set(arr.map(p => p.category))];
+    const buckets = ['0-30天','30-60天','60-90天','90-120天','>120天'];
+    const bucketColors = ['rgba(16,185,129,0.7)','rgba(234,179,8,0.7)','rgba(245,158,11,0.7)','rgba(249,115,22,0.7)','rgba(239,68,68,0.7)'];
+    const bucketData = cats.map(cat => {
+        const catItems = arr.filter(p => p.category === cat);
+        return buckets.map((_, bi) => catItems.filter(p => p.agingBucket === bi).reduce((s,p) => s+p.totalCurrentValue, 0) / 10000);
+    });
+
+    cc('chartAging', 'bar', {
+        labels: cats,
+        datasets: buckets.map((label, bi) => ({
+            label,
+            data: cats.map((cat, ci) => bucketData[ci][bi].toFixed(1)),
+            backgroundColor: bucketColors[bi],
+            borderRadius: 2
+        }))
+    }, {
+        scales: { x: { stacked:true }, y: { stacked:true, ticks:{ callback: v=>v+'萬' } } },
+        plugins: { legend:{ position:'top' } }
+    });
+
+    // Loss estimate
+    const lossRates = readLossRates();
+    const lossByBucket = [0,1,2,3,4].map(bi =>
+        arr.filter(p=>p.agingBucket===bi).reduce((s,p)=>s+p.totalCurrentValue*lossRates[bi],0)
+    );
+    const lossIds = ['loss-30','loss-60','loss-90','loss-180'];
+    const fmt = v => (v/10000).toFixed(1) + '萬元';
+    [1,2,3,4].forEach((bi,i) => {
+        const el = document.getElementById(lossIds[i]);
+        if (el) el.textContent = fmt(lossByBucket[bi]);
+    });
+    const totalLoss = lossByBucket.reduce((s,v)=>s+v,0);
+    const elTot = document.getElementById('loss-total');
+    if (elTot) elTot.textContent = fmt(totalLoss);
+
+    // Divergence signal
+    const mKeys = aggregatedData.mKeys || [];
+    const ms = aggregatedData.monthly;
+    const divPanel = document.getElementById('divergence-panel');
+    if (divPanel && mKeys.length >= 2) {
+        const lastMo = mKeys[mKeys.length-1];
+        const prevMo = mKeys[mKeys.length-2];
+        const dsiNow = ms[lastMo].dsi || 0;
+        const dsiPrev = ms[prevMo].dsi || 0;
+        const outNow = ms[lastMo].totalOut || 0;
+        const outPrev = ms[prevMo].totalOut || 0;
+        let signal = '— 正常範圍';
+        let signalColor = 'text-slate-400';
+        if (dsiNow > dsiPrev*1.2 && outNow < outPrev*0.9) {
+            signal = '⚠ 高庫存低銷量 背離';
+            signalColor = 'text-red-400';
+        } else if (dsiNow < dsiPrev*0.8 && outNow > outPrev*1.1) {
+            signal = '✓ 低庫存高銷量 健康';
+            signalColor = 'text-emerald-400';
+        }
+        divPanel.innerHTML = '<div class="' + signalColor + ' font-medium">' + signal + '</div>' +
+            '<div class="mt-2 space-y-1">' +
+            '<div>本月DSI: <span class="text-white">' + dsiNow.toFixed(1) + '天</span></div>' +
+            '<div>上月DSI: <span class="text-white">' + dsiPrev.toFixed(1) + '天</span></div>' +
+            '<div>本月出庫: <span class="text-white">' + outNow.toFixed(0) + '</span></div>' +
+            '<div>上月出庫: <span class="text-white">' + outPrev.toFixed(0) + '</span></div>' +
+            '</div>';
+    }
+
+    // Health radar
+    const health = aggregatedData._health || 0;
+    const dsi = aggregatedData._dsi || 0;
+    const turnover = aggregatedData._turnover || 0;
+    const gmroi = aggregatedData._gmroi || 0;
+    const str = aggregatedData._str || 0;
+    const aging90 = aggregatedData._aging90Pct || 0;
+    cc('chartHealth', 'radar', {
+        labels: ['庫存健康','周轉效率','庫齡控制','GMROI','售磬率'],
+        datasets: [{
+            label: '當前狀態',
+            data: [
+                health,
+                Math.min(100, turnover/10*100),
+                Math.max(0, 100 - aging90*2),
+                Math.min(100, gmroi/3*100),
+                Math.min(100, str*100)
+            ],
+            backgroundColor: 'rgba(99,102,241,0.2)',
+            borderColor: '#6366f1',
+            pointBackgroundColor: '#6366f1',
+            pointRadius: 4
+        }]
+    }, {
+        scales: { r: { min:0, max:100, ticks:{ stepSize:25 } } },
+        plugins: { legend:{ display:false } }
+    });
+}
+
+// ══ 11. RENDER: FORECAST ══
+function renderForecast() {
+    if (!aggregatedData.products) return;
+    const ms = aggregatedData.monthly;
+    const mKeys = aggregatedData.mKeys || [];
+    const seasonalIndex = aggregatedData.seasonalIndex || {};
+    const fisherRatio = aggregatedData.fisherRatio || 0;
+
+    // Fisher panel
+    const fisherPanel = document.getElementById('fisher-panel');
+    if (fisherPanel) {
+        const threshold = 6.5;
+        const hasSeason = fisherRatio > threshold;
+        fisherPanel.innerHTML =
+            '<div class="flex justify-between mb-2"><span class="text-slate-400">Fisher比值</span><span class="' + (hasSeason?'text-emerald-400':'text-slate-300') + ' font-bold">' + fisherRatio.toFixed(2) + '</span></div>' +
+            '<div class="flex justify-between mb-2"><span class="text-slate-400">臨界值(n=12)</span><span class="text-slate-300">' + threshold + '</span></div>' +
+            '<div class="flex justify-between mb-3"><span class="text-slate-400">判定結果</span><span class="' + (hasSeason?'text-emerald-400':'text-amber-400') + ' font-semibold">' + (hasSeason?'✓ 具季節性':'— 無顯著季節性') + '</span></div>' +
+            '<div class="text-[0.65rem] text-slate-500">' + (hasSeason?'建議使用季節調整預測模型':'建議使用趨勢/移動均值模型') + '</div>' +
+            '<div class="mt-2 text-[0.65rem] text-slate-500">H₀: 無週期性 | 拒絕域: F > ' + threshold + '</div>';
+    }
+
+    // Seasonal radar
+    const monthLabels = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+    const siData = monthLabels.map((_, i) => (seasonalIndex[i+1] || 1).toFixed(3));
+    cc('chartSeasonalRadar', 'radar', {
+        labels: monthLabels,
+        datasets: [{
+            label: '季節指數',
+            data: siData,
+            backgroundColor: 'rgba(34,211,238,0.15)',
+            borderColor: '#22d3ee',
+            pointBackgroundColor: '#22d3ee',
+            pointRadius: 4
+        }, {
+            label: '基準線(1.0)',
+            data: Array(12).fill(1),
+            backgroundColor: 'transparent',
+            borderColor: 'rgba(255,255,255,0.2)',
+            borderDash: [4,4],
+            pointRadius: 0
+        }]
+    }, {
+        plugins: { legend:{ position:'top' } },
+        scales: { r: { min:0.5, max:1.5, ticks:{ stepSize:0.25 } } }
+    });
+
+    // 3-method forecast (extend 3 months)
+    const histLabels = mKeys.map(k => k.slice(5));
+    const histOut = mKeys.map(k => ms[k].totalOut || 0);
+    const lastMo = mKeys[mKeys.length-1] || '2026-02';
+    const futureLabels = [];
+    for (let i = 1; i <= 3; i++) {
+        const d = new Date(lastMo + '-01');
+        d.setMonth(d.getMonth() + i);
+        futureLabels.push(d.toISOString().slice(0,7).slice(5));
+    }
+    const allLabels = [...histLabels, ...futureLabels];
+
+    // MA3 forecast
+    const ma3base = histOut.slice(-3).reduce((s,v)=>s+v,0)/3;
+    // Trend forecast
+    const n = histOut.length;
+    const xBar = (n-1)/2;
+    const yBar = histOut.reduce((s,v)=>s+v,0)/n;
+    const slope = histOut.reduce((s,v,i)=>s+(i-xBar)*(v-yBar),0) / histOut.reduce((s,_,i)=>s+(i-xBar)**2,0);
+    const intercept = yBar - slope*xBar;
+    // Composite forecast with seasonal
+    const nextMonths = [1,2,3].map(i => {
+        const d = new Date(lastMo + '-01');
+        d.setMonth(d.getMonth() + i);
+        return d.getMonth() + 1;
+    });
+
+    const histNulls = Array(histLabels.length).fill(null);
+    const ma3Forecast = [...histNulls, ...nextMonths.map(() => Math.round(ma3base))];
+    const trendForecast = [...histNulls, ...nextMonths.map((_, i) => Math.max(0, Math.round(intercept + slope*(n+i))))];
+    const compositeForecast = [...histNulls, ...nextMonths.map((mn, i) => {
+        const si = seasonalIndex[mn] || 1;
+        return Math.max(0, Math.round(((ma3base*0.6 + (intercept+slope*(n+i))*0.4)) * si));
+    })];
+
+    // Upper/lower bands for composite
+    const bandUpper = [...histNulls, ...compositeForecast.slice(n).map(v => Math.round(v * 1.15))];
+    const bandLower = [...histNulls, ...compositeForecast.slice(n).map(v => Math.round(v * 0.85))];
+
+    cc('chartForecast', 'line', {
+        labels: allLabels,
+        datasets: [{
+            label: '歷史出庫',
+            data: [...histOut, ...Array(3).fill(null)],
+            borderColor: '#94a3b8',
+            backgroundColor: 'rgba(148,163,184,0.08)',
+            fill: false,
+            pointRadius: 2
+        }, {
+            label: 'MA3預測',
+            data: ma3Forecast,
+            borderColor: '#6366f1',
+            borderDash: [6,3],
+            backgroundColor: 'transparent',
+            pointRadius: 4,
+            spanGaps: false
+        }, {
+            label: '趨勢預測',
+            data: trendForecast,
+            borderColor: '#f59e0b',
+            borderDash: [6,3],
+            backgroundColor: 'transparent',
+            pointRadius: 4,
+            spanGaps: false
+        }, {
+            label: '複合預測',
+            data: compositeForecast,
+            borderColor: '#10b981',
+            borderDash: [6,3],
+            backgroundColor: 'rgba(16,185,129,0.1)',
+            fill: false,
+            pointRadius: 5,
+            spanGaps: false
+        }, {
+            label: '上限(+15%)',
+            data: bandUpper,
+            borderColor: 'rgba(16,185,129,0.3)',
+            backgroundColor: 'rgba(16,185,129,0.05)',
+            fill: '+1',
+            pointRadius: 0,
+            borderDash: [2,4],
+            spanGaps: false
+        }, {
+            label: '下限(-15%)',
+            data: bandLower,
+            borderColor: 'rgba(16,185,129,0.3)',
+            backgroundColor: 'rgba(16,185,129,0.05)',
+            fill: false,
+            pointRadius: 0,
+            borderDash: [2,4],
+            spanGaps: false
+        }]
+    }, {
+        plugins: { legend:{ position:'top' } }
+    });
+
+    // ROP table
+    const ropBody = document.getElementById('rop-table-body');
+    if (ropBody) {
+        const top20 = [...aggregatedData.products].sort((a,b) => b.totalCurrentValue - a.totalCurrentValue).slice(0,20);
+        ropBody.innerHTML = top20.map(p => {
+            const status = p.totalCurrent < p.rop ? '⚠ 低於ROP' : '✓ 充足';
+            const statusClass = p.totalCurrent < p.rop ? 'text-red-400' : 'text-emerald-400';
+            return '<tr>' +
+                '<td>' + p.name + '</td>' +
+                '<td class="text-right">' + p.dailySalesAvg.toFixed(2) + '</td>' +
+                '<td class="text-right">' + p.leadTime + '</td>' +
+                '<td class="text-right">' + Math.round(p.safetyStock) + '</td>' +
+                '<td class="text-right">' + Math.round(p.rop) + '</td>' +
+                '<td class="text-right">' + p.totalCurrent + '</td>' +
+                '<td class="' + statusClass + '">' + status + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+}
+
+// ══ 12. RENDER: SUPPLY ══
+function renderSupply() {
+    if (!aggregatedData.products) return;
+    const arr = aggregatedData.products;
+    const ms = aggregatedData.monthly;
+    const mKeys = aggregatedData.mKeys || [];
+
+    // GMROI by category
+    const catGMROI = {};
+    const catInv = {};
+    arr.forEach(p => {
+        catGMROI[p.category] = (catGMROI[p.category] || 0) + p.gmroi * p.totalCurrentValue;
+        catInv[p.category] = (catInv[p.category] || 0) + p.totalCurrentValue;
+    });
+    const cats = Object.keys(catGMROI);
+    const gmroiVals = cats.map(c => catInv[c] > 0 ? (catGMROI[c]/catInv[c]).toFixed(2) : 0);
+    cc('chartGMROI', 'bar', {
+        labels: cats,
+        datasets: [{
+            label: 'GMROI',
+            data: gmroiVals,
+            backgroundColor: cats.map(c => CAT_COLORS[c] || '#6366f1'),
+            borderRadius: 4
+        }]
+    }, {
+        indexAxis: 'y',
+        plugins: { legend:{ display:false } },
+        scales: {
+            x: { ticks:{ callback: v => v + '倍' } },
+            y: {}
+        }
+    });
+
+    // Heatmap using Canvas 2D — responsive, DPR-aware, all months
+    const heatmapContainer = document.getElementById('chartHeatmap');
+    if (heatmapContainer) {
+        heatmapContainer.innerHTML = '';
+        const months = mKeys;                           // all available months
+        const padL = 90, padT = 44, padB = 12, padR = 10;
+        const containerW = heatmapContainer.clientWidth || 480;
+        const cellH = 30;
+        // cellW fills container width; minimum 32px so numbers are readable
+        const cellW = Math.max(32, Math.floor((containerW - padL - padR) / Math.max(1, months.length)));
+        const logicalW = padL + months.length * cellW + padR;
+        const logicalH = padT + cats.length * cellH + padB;
+
+        const dpr = window.devicePixelRatio || 1;
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.round(logicalW * dpr);
+        canvas.height = Math.round(logicalH * dpr);
+        canvas.style.width    = logicalW + 'px';
+        canvas.style.height   = logicalH + 'px';
+        canvas.style.maxWidth = '100%';
+        canvas.style.display  = 'block';
+        heatmapContainer.appendChild(canvas);
+
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const isDark = !document.body.classList.contains('light-mode');
+        ctx.fillStyle = isDark ? '#1e293b' : '#f1f5f9';
+        ctx.fillRect(0, 0, logicalW, logicalH);
+
+        const labelColor = isDark ? '#94a3b8' : '#64748b';
+        const fontSize = Math.max(9, Math.min(12, cellW - 6));
+        ctx.font = fontSize + 'px sans-serif';
+
+        // Y-axis: category labels
+        cats.forEach((cat, ci) => {
+            ctx.fillStyle = labelColor;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(cat.slice(0, 5), padL - 6, padT + ci * cellH + cellH / 2);
+        });
+
+        // X-axis: month labels
+        months.forEach((mo, mi) => {
+            ctx.fillStyle = labelColor;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(mo.slice(5), padL + mi * cellW + cellW / 2, padT - 6);
+        });
+
+        // Aggregate out_qty by category × month
+        const catMoData = {};
+        cats.forEach(cat => {
+            catMoData[cat] = {};
+            months.forEach(mo => {
+                catMoData[cat][mo] = arr.filter(p => p.category === cat)
+                    .reduce((s, p) => s + (p.monthlyOut[mo] || 0), 0);
+            });
+        });
+        const maxVal = Math.max(1, ...cats.flatMap(cat => months.map(mo => catMoData[cat][mo])));
+
+        cats.forEach((cat, ci) => {
+            months.forEach((mo, mi) => {
+                const val = catMoData[cat][mo];
+                const ratio = val / maxVal;
+                const r = Math.round(99  + (239 - 99)  * ratio);
+                const g = Math.round(102 + (68  - 102) * ratio);
+                const b = Math.round(241 + (94  - 241) * ratio);
+                const x = padL + mi * cellW + 1;
+                const y = padT + ci * cellH + 1;
+                ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.88)';
+                ctx.fillRect(x, y, cellW - 2, cellH - 2);
+
+                // Value label — adaptive color (white on dark cell, dark on light cell)
+                ctx.fillStyle = ratio > 0.45 ? '#ffffff' : (isDark ? '#e2e8f0' : '#1e293b');
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const label = val >= 10000 ? (val / 1000).toFixed(0) + 'k' : val.toFixed(0);
+                ctx.fillText(label, x + (cellW - 2) / 2, y + (cellH - 2) / 2);
+            });
+        });
+    }
+
+    // Replenishment table
+    const repBody = document.getElementById('replenish-table-body');
+    if (repBody) {
+        const toReplenish = arr.filter(p => p.totalCurrent <= p.rop * 1.1)
+            .sort((a,b) => (a.totalCurrent/a.rop) - (b.totalCurrent/b.rop))
+            .slice(0, 15);
+        if (toReplenish.length === 0) {
+            repBody.innerHTML = '<tr><td colspan="6" class="text-center text-emerald-400 py-4">✓ 目前無緊急補貨需求</td></tr>';
+        } else {
+            repBody.innerHTML = toReplenish.map(p => {
+                const repQty = Math.max(0, Math.round(p.eoq || (p.dailySalesAvg * p.leadTime * 1.5)));
+                const urgency = p.totalCurrent < p.safetyStock ? '🔴 緊急' : p.totalCurrent < p.rop ? '🟡 建議' : '🟢 觀察';
+                const daysToReplenish = p.dailySalesAvg > 0 ? Math.floor((p.totalCurrent - p.safetyStock) / p.dailySalesAvg) : 99;
+                const repDate = new Date();
+                repDate.setDate(repDate.getDate() + Math.max(0, daysToReplenish - p.leadTime));
+                return '<tr>' +
+                    '<td>' + p.category + '</td>' +
+                    '<td>' + p.name + '</td>' +
+                    '<td class="text-right">' + repQty + ' 件</td>' +
+                    '<td class="text-right">' + repDate.toISOString().slice(0,10) + '</td>' +
+                    '<td class="text-right">' + (repQty * p.unitCost).toLocaleString() + ' 元</td>' +
+                    '<td>' + urgency + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+    }
+}
+
+
+
+// ══ 13. RENDER: ITEMS ══
+function renderItems() {
+    if (!aggregatedData.products) return;
+    applyItemFilters();
+}
+
+function applyItemFilters() {
+    if (!aggregatedData.products) return;
+    const search = (document.getElementById('item-search')?.value || '').toLowerCase();
+    const cat = document.getElementById('item-cat-filter')?.value || '';
+    const abc = document.getElementById('item-abc-filter')?.value || '';
+    const xyz = document.getElementById('item-xyz-filter')?.value || '';
+    const sort = document.getElementById('item-sort')?.value || 'value_desc';
+
+    filteredItems = aggregatedData.products.filter(p => {
+        if (search && !p.name.toLowerCase().includes(search) && !p.id.toLowerCase().includes(search)) return false;
+        if (cat && p.category !== cat) return false;
+        if (abc && p.abc !== abc) return false;
+        if (xyz && p.xyz !== xyz) return false;
+        return true;
+    });
+
+    const sortMap = {
+        'value_desc': (a,b) => b.totalCurrentValue - a.totalCurrentValue,
+        'value_asc': (a,b) => a.totalCurrentValue - b.totalCurrentValue,
+        'aging_desc': (a,b) => b.avgAging - a.avgAging,
+        'aging_asc': (a,b) => a.avgAging - b.avgAging,
+        'gmroi_desc': (a,b) => b.gmroi - a.gmroi,
+        'str_desc': (a,b) => b.str - a.str
+    };
+    filteredItems.sort(sortMap[sort] || sortMap['value_desc']);
+
+    rowsPerPage = parseInt(document.getElementById('items-per-page')?.value || '20');
+    renderItemsPage();
+}
+
+function renderItemsPage() {
+    const total = filteredItems.length;
+    const totalPages = Math.max(1, Math.ceil(total / rowsPerPage));
+    currentPage = Math.min(currentPage, totalPages);
+    const start = (currentPage - 1) * rowsPerPage;
+    const pageItems = filteredItems.slice(start, start + rowsPerPage);
+
+    const pageInfo = document.getElementById('page-info');
+    if (pageInfo) pageInfo.textContent = '第 ' + currentPage + ' / ' + totalPages + ' 頁（共 ' + total + ' 筆）';
+
+    const tbody = document.getElementById('items-table-body');
+    if (!tbody) return;
+
+    const abcColor = { A:'text-blue-400', B:'text-amber-400', C:'text-slate-400' };
+    const xyzColor = { X:'text-emerald-400', Y:'text-yellow-400', Z:'text-red-400' };
+
+    tbody.innerHTML = pageItems.map(p => {
+        const ropStatus = p.totalCurrent < p.rop ? '<span class="text-red-400">⚠ 低</span>' : '<span class="text-emerald-400">✓ 正常</span>';
+        return '<tr>' +
+            '<td>' + p.category + '</td>' +
+            '<td class="text-slate-400">' + p.id + '</td>' +
+            '<td>' + p.name + '</td>' +
+            '<td class="text-center ' + abcColor[p.abc] + ' font-bold">' + p.abc + '</td>' +
+            '<td class="text-center ' + xyzColor[p.xyz] + ' font-bold">' + p.xyz + '</td>' +
+            '<td class="text-center font-bold">' + p.abcxyz + '</td>' +
+            '<td class="text-right">' + p.totalCurrent.toLocaleString() + '</td>' +
+            '<td class="text-right">' + p.totalCurrentValue.toLocaleString() + '</td>' +
+            '<td class="text-right ' + (p.avgAging > 90 ? 'text-red-400' : p.avgAging > 60 ? 'text-amber-400' : '') + '">' + p.avgAging.toFixed(0) + '</td>' +
+            '<td>' + (p.strType === 'fast' ? '快銷' : '慢銷') + '</td>' +
+            '<td class="text-right">' + (p.str*100).toFixed(1) + '%</td>' +
+            '<td class="text-right ' + (p.gmroi < 0.5 ? 'text-red-400' : p.gmroi > 1.5 ? 'text-emerald-400' : '') + '">' + p.gmroi.toFixed(2) + '</td>' +
+            '<td>' + ropStatus + '</td>' +
+            '</tr>';
+    }).join('');
+
+    // Update category filter options
+    const catSel = document.getElementById('item-cat-filter');
+    if (catSel && catSel.options.length <= 1) {
+        const cats = [...new Set(aggregatedData.products.map(p => p.category))].sort();
+        cats.forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat; opt.textContent = cat;
+            catSel.appendChild(opt);
+        });
+    }
+}
+
+// ══ 14. RENDER: ACTIONS ══
+function renderActions() {
+    if (!aggregatedData.products) return;
+    const arr = aggregatedData.products;
+    const actions = [];
+    const totalInv = aggregatedData.totalVal || 1;
+
+    // 1. High DSI
+    const dsi = aggregatedData._dsi || 0;
+    if (dsi > alertCfg.dsiMax) {
+        actions.push({ type:'error', icon:'clock', title:'DSI 超標', desc:'庫存天數 ' + dsi.toFixed(0) + ' 天，超過上限 ' + alertCfg.dsiMax + ' 天', action:'建議促銷或調撥過剩庫存' });
+    }
+
+    // 2. Aging risk
+    const agingRisk = arr.filter(p => p.avgAging > 90);
+    if (agingRisk.length > 0) {
+        const val = agingRisk.reduce((s,p)=>s+p.totalCurrentValue,0);
+        actions.push({ type:'warning', icon:'alert-triangle', title:'高庫齡品項', desc: agingRisk.length + ' 個品項平均庫齡超過90天，合計 ' + (val/10000).toFixed(1) + ' 萬元', action:'建議降價清倉或轉調庫存' });
+    }
+
+    // 3. Low GMROI
+    const lowGMROI = arr.filter(p => p.gmroi < alertCfg.gmroiMin && p.totalCurrentValue > 10000);
+    if (lowGMROI.length > 0) {
+        actions.push({ type:'warning', icon:'trending-down', title:'GMROI 偏低', desc: lowGMROI.length + ' 個品項 GMROI < ' + alertCfg.gmroiMin, action:'建議提升毛利或降低庫存持有' });
+    }
+
+    // 4. Stockouts
+    const stockouts = arr.filter(p => p.totalCurrent < p.rop);
+    if (stockouts.length > 0) {
+        actions.push({ type:'error', icon:'package', title:'庫存低於ROP', desc: stockouts.length + ' 個品項庫存低於再訂購點', action:'建議立即啟動補貨流程' });
+    }
+
+    // 5. Supply-demand imbalance
+    const imbalanced = arr.filter(p => Math.abs(p.imbalance) > alertCfg.imbMax);
+    if (imbalanced.length > 0) {
+        actions.push({ type:'info', icon:'bar-chart-2', title:'供需失衡品項', desc: imbalanced.length + ' 個品項供需失衡指數 > ' + (alertCfg.imbMax*100).toFixed(0) + '%', action:'建議重新評估採購計畫' });
+    }
+
+    // 6. EOQ deviation
+    const eoqDev = arr.filter(p => p.eoqDeviation > CFG.ALERT.EOQ_DEV_MAX);
+    if (eoqDev.length > 0) {
+        actions.push({ type:'info', icon:'calculator', title:'EOQ偏離過大', desc: eoqDev.length + ' 個品項批量偏離EOQ超過30%', action:'建議調整訂購批量以降低總成本' });
+    }
+
+    // 7. Data quality
+    const qualIssues = aggregatedData.qualityIssues || [];
+    const critIssues = qualIssues.filter(q => q.severity === 'error');
+    if (critIssues.length > 0) {
+        actions.push({ type:'error', icon:'shield-alert', title:'資料品質問題', desc: critIssues.length + ' 筆嚴重資料異常需要修正', action:'請至資料品質頁面查看詳情' });
+    }
+
+    const actionList = document.getElementById('action-list');
+    if (actionList) {
+        if (actions.length === 0) {
+            actionList.innerHTML = '<div class="text-center text-emerald-400 py-8">✓ 目前無需緊急處理的策略行動</div>';
+        } else {
+            const typeColors = { error:'border-red-500 bg-red-500/10', warning:'border-amber-500 bg-amber-500/10', info:'border-blue-500 bg-blue-500/10' };
+            const typeBadge = { error:'<span class="text-[0.6rem] bg-red-500 text-white px-1.5 py-0.5 rounded">緊急</span>',
+                warning:'<span class="text-[0.6rem] bg-amber-500 text-white px-1.5 py-0.5 rounded">警告</span>',
+                info:'<span class="text-[0.6rem] bg-blue-500 text-white px-1.5 py-0.5 rounded">建議</span>' };
+            actionList.innerHTML = actions.map(a =>
+                '<div class="border-l-2 rounded-r-lg p-3 ' + (typeColors[a.type]||'border-slate-500') + '">' +
+                '<div class="flex items-center gap-2 mb-1">' + typeBadge[a.type] + '<span class="text-sm font-medium">' + a.title + '</span></div>' +
+                '<div class="text-xs text-slate-300 mb-1">' + a.desc + '</div>' +
+                '<div class="text-xs text-slate-400">→ ' + a.action + '</div>' +
+                '</div>'
+            ).join('');
+        }
+    }
+
+    // Scorecard
+    const health = aggregatedData._health || 0;
+    const turnover = aggregatedData._turnover || 0;
+    const aging90Pct = aggregatedData._aging90Pct || 0;
+    const gmroi = aggregatedData._gmroi || 0;
+    const str = aggregatedData._str || 0;
+    const qualScore = Math.max(0, 100 - (qualIssues.filter(q=>q.severity==='error').length * 10) - (qualIssues.filter(q=>q.severity==='warning').length * 3));
+    const supplyScore = Math.max(0, 100 - (stockouts.length / Math.max(arr.length,1)) * 200);
+
+    const setBar = (barId, valId, pct, val) => {
+        const b = document.getElementById(barId);
+        const v = document.getElementById(valId);
+        if (b) b.style.width = Math.min(100, Math.max(0, pct)) + '%';
+        if (v) v.textContent = val;
+    };
+    setBar('sc-health', 'sc-health-val', health, health.toFixed(0) + '分');
+    setBar('sc-turn', 'sc-turn-val', Math.min(100, turnover/10*100), turnover.toFixed(2) + '次');
+    setBar('sc-aging', 'sc-aging-val', Math.max(0, 100 - aging90Pct*2), (100-aging90Pct*2).toFixed(0) + '分');
+    setBar('sc-forecast', 'sc-forecast-val', qualScore, qualScore.toFixed(0) + '分');
+    setBar('sc-supply', 'sc-supply-val', supplyScore, supplyScore.toFixed(0) + '分');
+    setBar('sc-profit', 'sc-profit-val', Math.min(100, gmroi/3*100), gmroi.toFixed(2) + '倍');
+}
+
+// ══ 15. RENDER: WHAT-IF ══
+function renderWhatIf() {
+    if (!aggregatedData.products) return;
+    updateWhatIf();
+}
+
+function updateWhatIf() {
+    const arr = aggregatedData.products;
+    if (!arr) return;
+    const totalInv = aggregatedData.totalVal || 0;
+    const totalCOGS = aggregatedData.totalCOGS || 0;
+    const holdRate = whatIfParams.hold / 100;
+    const growthRate = whatIfParams.growth / 100;
+    const leadAdj = whatIfParams.lead;
+    const svcZ = whatIfParams.svc <= 90 ? 1.282 : whatIfParams.svc <= 95 ? 1.645 : 2.326;
+
+    function calcScenario(gMult, ssZ, holdMult, ltAdj) {
+        const projCOGS = totalCOGS * (1 + gMult);
+        const projInv = totalInv * (1 + gMult * 0.6);
+        const dsi = projCOGS > 0 ? (projInv / projCOGS) * CFG.DAYS : 0;
+        const totalSS = arr.reduce((s,p) => {
+            const lt = Math.max(1, p.leadTime + ltAdj);
+            const dailyStd = p.dailySalesAvg * (1+gMult) * 0.3;
+            return s + ssZ * Math.sqrt(lt) * dailyStd * p.unitCost;
+        }, 0);
+        const holdingCost = projInv * holdMult;
+        const gmroi = projInv > 0 ? arr.reduce((s,p)=>s+(p.totalRev*(1+gMult)*p.grossMargin),0) / projInv : 0;
+        return { inv: projInv/10000, dsi, ss: totalSS/10000, hc: holdingCost/10000, gmroi };
+    }
+
+    const base = calcScenario(growthRate, svcZ, holdRate, leadAdj);
+    const pes = calcScenario(growthRate - 0.1, Math.max(svcZ-0.3, 1.0), holdRate + 0.03, leadAdj + 3);
+    const opt = calcScenario(growthRate + 0.3, Math.min(svcZ+0.3, 2.5), holdRate - 0.03, Math.max(0, leadAdj - 3));
+
+    const setText = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+    setText('wi-inv-pes', pes.inv.toFixed(1));
+    setText('wi-inv-base', base.inv.toFixed(1));
+    setText('wi-inv-opt', opt.inv.toFixed(1));
+    setText('wi-dsi-pes', pes.dsi.toFixed(1));
+    setText('wi-dsi-base', base.dsi.toFixed(1));
+    setText('wi-dsi-opt', opt.dsi.toFixed(1));
+    setText('wi-ss-pes', pes.ss.toFixed(1));
+    setText('wi-ss-base', base.ss.toFixed(1));
+    setText('wi-ss-opt', opt.ss.toFixed(1));
+    setText('wi-hc-pes', pes.hc.toFixed(1));
+    setText('wi-hc-base', base.hc.toFixed(1));
+    setText('wi-hc-opt', opt.hc.toFixed(1));
+    setText('wi-gm-pes', pes.gmroi.toFixed(2));
+    setText('wi-gm-base', base.gmroi.toFixed(2));
+    setText('wi-gm-opt', opt.gmroi.toFixed(2));
+
+    const metrics = ['庫存金額(萬)', 'DSI(天)', '安全庫存(萬)', '持有成本(萬)', 'GMROI'];
+    const pesVals = [pes.inv, pes.dsi, pes.ss, pes.hc, pes.gmroi];
+    const baseVals = [base.inv, base.dsi, base.ss, base.hc, base.gmroi];
+    const optVals = [opt.inv, opt.dsi, opt.ss, opt.hc, opt.gmroi];
+
+    cc('chartWhatif', 'bar', {
+        labels: metrics,
+        datasets: [{
+            label: '悲觀',
+            data: pesVals.map(v => v.toFixed(2)),
+            backgroundColor: 'rgba(244,63,94,0.7)',
+            borderRadius: 3
+        }, {
+            label: '基準',
+            data: baseVals.map(v => v.toFixed(2)),
+            backgroundColor: 'rgba(99,102,241,0.7)',
+            borderRadius: 3
+        }, {
+            label: '樂觀',
+            data: optVals.map(v => v.toFixed(2)),
+            backgroundColor: 'rgba(16,185,129,0.7)',
+            borderRadius: 3
+        }]
+    }, {
+        plugins: { legend:{ position:'top' } }
+    });
+}
+
+// ══ 16. RENDER: EOQ ══
+function renderEOQ() {
+    if (!aggregatedData.products) return;
+    const arr = aggregatedData.products;
+    const orderCost = parseFloat(document.getElementById('eoq-order-cost')?.value || '500');
+    const holdingRatePct = parseFloat(document.getElementById('eoq-holding-rate')?.value || '25') / 100;
+
+    // Aggregate EOQ curve for "average" product
+    const avgAnnualD = arr.reduce((s,p)=>s+p.annualDemand,0)/arr.length;
+    const avgUnitCost = arr.reduce((s,p)=>s+p.unitCost,0)/arr.length;
+    const H = avgUnitCost * holdingRatePct;
+    const eoqOptimal = H > 0 ? Math.sqrt(2 * avgAnnualD * orderCost / H) : 100;
+    const qRange = [];
+    for (let q = Math.max(10, eoqOptimal*0.2); q <= eoqOptimal*3; q += eoqOptimal*0.15) qRange.push(Math.round(q));
+    const holdCosts = qRange.map(q => (q/2 * H).toFixed(0));
+    const orderCosts = qRange.map(q => (avgAnnualD/q * orderCost).toFixed(0));
+    const totalCosts = qRange.map((q,i) => (parseFloat(holdCosts[i]) + parseFloat(orderCosts[i])).toFixed(0));
+
+    cc('chartEOQ', 'line', {
+        labels: qRange.map(q => Math.round(q)),
+        datasets: [{
+            label: '持有成本',
+            data: holdCosts,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245,158,11,0.1)',
+            fill: false,
+            tension: 0.4,
+            pointRadius: 2
+        }, {
+            label: '訂購成本',
+            data: orderCosts,
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99,102,241,0.1)',
+            fill: false,
+            tension: 0.4,
+            pointRadius: 2
+        }, {
+            label: '總成本',
+            data: totalCosts,
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16,185,129,0.1)',
+            fill: false,
+            tension: 0.4,
+            pointRadius: 3,
+            borderWidth: 2
+        }]
+    }, {
+        plugins: {
+            legend:{ position:'top' },
+            tooltip:{ callbacks:{ afterLabel: ctx => ctx.datasetIndex===2 && Math.abs(qRange[ctx.dataIndex]-eoqOptimal)<eoqOptimal*0.15 ? '← EOQ最優點' : '' } }
+        },
+        scales: { y:{ ticks:{ callback: v => v.toLocaleString() + '元' } } }
+    });
+
+    // EOQ table
+    const tbody = document.getElementById('eoq-table-body');
+    if (tbody) {
+        const top15 = [...arr].sort((a,b)=>b.annualDemand-a.annualDemand).slice(0,15);
+        tbody.innerHTML = top15.map(p => {
+            const h = p.unitCost * holdingRatePct;
+            const eoq = h > 0 ? Math.round(Math.sqrt(2*p.annualDemand*orderCost/h)) : 0;
+            const annualHC = (eoq/2 * h).toFixed(0);
+            const annualOC = eoq > 0 ? (p.annualDemand/eoq * orderCost).toFixed(0) : 0;
+            const devPct = p.eoqDeviation > 0.3 ? 'text-red-400' : 'text-emerald-400';
+            return '<tr>' +
+                '<td>' + p.name + '</td>' +
+                '<td class="text-right">' + Math.round(p.annualDemand).toLocaleString() + '</td>' +
+                '<td class="text-right">' + eoq.toLocaleString() + '</td>' +
+                '<td class="text-right ' + devPct + '">' + (p.eoqDeviation*100).toFixed(1) + '%</td>' +
+                '<td class="text-right">' + parseFloat(annualHC).toLocaleString() + '</td>' +
+                '<td class="text-right">' + parseFloat(annualOC).toLocaleString() + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+}
+
+// ══ 17. RENDER: FIFO ══
+function renderFIFO() {
+    if (!aggregatedData.products) return;
+    const sel = document.getElementById('fifo-product-select');
+    if (sel && sel.options.length <= 1) {
+        aggregatedData.products.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id; opt.textContent = p.id + ' ' + p.name;
+            sel.appendChild(opt);
+        });
+    }
+    const selectedId = sel?.value;
+    if (!selectedId) { renderFIFOProduct(aggregatedData.products[0]?.id); return; }
+    renderFIFOProduct(selectedId);
+}
+
+function renderFIFOProduct(productId) {
+    if (!productId || !aggregatedData.products) return;
+    const fifoResult = computeFIFO(productId);
+    if (!fifoResult) return;
+
+    const { batches, stats } = fifoResult;
+    const setText = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+    setText('fifo-batch-count', batches.filter(b=>b.remaining>0).length);
+    setText('fifo-avg-aging', stats.avgAging.toFixed(1) + ' 天');
+    setText('fifo-total-value', stats.totalValue.toLocaleString() + ' 元');
+
+    // FIFO waterfall chart (horizontal stacked)
+    const batchLabels = batches.map((b,i) => '批次' + (i+1) + ' (' + b.date.slice(5) + ')');
+    cc('chartFIFO', 'bar', {
+        labels: batchLabels,
+        datasets: [{
+            label: '已耗用',
+            data: batches.map(b => b.consumed),
+            backgroundColor: 'rgba(148,163,184,0.4)',
+            borderRadius: 2
+        }, {
+            label: '剩餘庫存',
+            data: batches.map(b => b.remaining),
+            backgroundColor: batches.map(b => b.aging > 90 ? 'rgba(239,68,68,0.7)' : b.aging > 60 ? 'rgba(245,158,11,0.7)' : 'rgba(16,185,129,0.7)'),
+            borderRadius: 2
+        }]
+    }, {
+        indexAxis: 'y',
+        scales: { x:{ stacked:true }, y:{ stacked:true } },
+        plugins:{ legend:{ position:'top' } }
+    });
+
+    // Batch detail table
+    const tbody = document.getElementById('fifo-table-body');
+    if (tbody) {
+        const today = new Date();
+        tbody.innerHTML = batches.map((b, i) => {
+            const statusClass = b.remaining === 0 ? 'text-slate-500' : b.aging > 90 ? 'text-red-400' : b.aging > 60 ? 'text-amber-400' : 'text-emerald-400';
+            const status = b.remaining === 0 ? '已耗盡' : b.aging > 90 ? '⚠ 高齡' : b.aging > 60 ? '注意' : '✓ 正常';
+            return '<tr>' +
+                '<td>批次' + (i+1) + '</td>' +
+                '<td>' + b.date + '</td>' +
+                '<td class="text-right">' + b.qty + '</td>' +
+                '<td class="text-right">' + b.consumed + '</td>' +
+                '<td class="text-right ' + (b.remaining>0?'text-blue-400':'text-slate-500') + '">' + b.remaining + '</td>' +
+                '<td class="text-right">' + b.cost.toFixed(2) + '</td>' +
+                '<td class="text-right">' + (b.remaining * b.cost).toFixed(0) + '</td>' +
+                '<td class="text-right ' + (b.aging > 90 ? 'text-red-400' : b.aging > 60 ? 'text-amber-400' : '') + '">' + b.aging + '</td>' +
+                '<td class="' + statusClass + '">' + status + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+}
+
+// ══ 18. COMPUTE FIFO ══
+function computeFIFO(productId) {
+    const product = aggregatedData.products?.find(p => p.id === productId);
+    if (!product) return null;
+
+    const productRaw = rawData.filter(r => r.ProductID === productId).sort((a,b) => a.Date.localeCompare(b.Date));
+    const batches = [];
+    let batchNum = 0;
+
+    productRaw.forEach(r => {
+        if ((r.in_qty || 0) > 0) {
+            batches.push({ date: r.Date, qty: r.in_qty, remaining: r.in_qty, consumed: 0, cost: r.UnitCost || product.unitCost });
+            batchNum++;
+        }
+        let toConsume = r.out_qty || 0;
+        for (let i = 0; i < batches.length && toConsume > 0; i++) {
+            const take = Math.min(batches[i].remaining, toConsume);
+            batches[i].remaining -= take;
+            batches[i].consumed += take;
+            toConsume -= take;
+        }
+    });
+
+    const today = new Date();
+    batches.forEach(b => {
+        const d = new Date(b.date);
+        b.aging = Math.floor((today - d) / 86400000);
+    });
+
+    const activeBatches = batches.filter(b => b.qty > 0);
+    const totalRemaining = activeBatches.reduce((s,b)=>s+b.remaining, 0);
+    const totalValue = activeBatches.reduce((s,b)=>s+b.remaining*b.cost, 0);
+    const avgAging = totalRemaining > 0
+        ? activeBatches.reduce((s,b)=>s+b.remaining*b.aging,0)/totalRemaining
+        : 0;
+
+    return { batches: activeBatches, stats: { totalRemaining, totalValue, avgAging } };
+}
+
+// ══ 19. RENDER: QUALITY ══
+function renderQuality() {
+    const issues = aggregatedData.qualityIssues || [];
+    const errors = issues.filter(q => q.severity === 'error').length;
+    const warnings = issues.filter(q => q.severity === 'warning').length;
+    const notices = issues.filter(q => q.severity === 'info').length;
+    const totalChecks = errors * 10 + warnings * 3 + notices;
+    const qualityScore = Math.max(0, Math.min(100, 100 - Math.min(totalChecks, 100)));
+
+    const setText = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+    setText('quality-score', qualityScore.toFixed(0));
+    setText('quality-errors', errors);
+    setText('quality-warnings', warnings);
+    setText('quality-notices', notices);
+
+    // Gauge arc
+    const arc = document.getElementById('gauge-arc');
+    if (arc) {
+        const totalLen = 188.5;
+        const filled = totalLen * (qualityScore / 100);
+        arc.setAttribute('stroke-dashoffset', (totalLen - filled).toFixed(1));
+        arc.setAttribute('stroke', qualityScore >= 80 ? '#10b981' : qualityScore >= 60 ? '#f59e0b' : '#ef4444');
+    }
+
+    // Checklist
+    const checkMark = (ok) => ok ? '<span class="text-emerald-400">✓</span>' : '<span class="text-red-400">✗</span>';
+    const hasDateIssue = issues.some(q => q.message.includes('日期'));
+    const hasQtyIssue = issues.some(q => q.message.includes('負值') || q.message.includes('超過'));
+    const hasCostIssue = issues.some(q => q.message.includes('成本') || q.message.includes('單價'));
+    const hasSKUIssue = issues.some(q => q.message.includes('ProductID'));
+    const hasBalIssue = issues.some(q => q.message.includes('平衡') || q.message.includes('庫存'));
+    const hasCatIssue = issues.some(q => q.message.includes('品類'));
+
+    [['qc-dates', !hasDateIssue], ['qc-qty', !hasQtyIssue], ['qc-cost', !hasCostIssue],
+     ['qc-sku', !hasSKUIssue], ['qc-balance', !hasBalIssue], ['qc-cat', !hasCatIssue]
+    ].forEach(([id, ok]) => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = checkMark(ok);
+    });
+
+    // Issues table
+    const tbody = document.getElementById('quality-table-body');
+    if (tbody) {
+        if (issues.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-emerald-400 py-6">✓ 資料品質良好，無異常</td></tr>';
+        } else {
+            const sevClass = { error:'text-red-400', warning:'text-amber-400', info:'text-blue-400' };
+            const sevLabel = { error:'🔴 嚴重', warning:'🟡 警告', info:'🔵 注意' };
+            tbody.innerHTML = issues.slice(0, 50).map(q =>
+                '<tr>' +
+                '<td class="' + (sevClass[q.severity]||'text-slate-400') + '">' + (sevLabel[q.severity]||q.severity) + '</td>' +
+                '<td>' + (q.product||'—') + '</td>' +
+                '<td>' + (q.date||'—') + '</td>' +
+                '<td>' + q.message + '</td>' +
+                '</tr>'
+            ).join('');
+        }
+    }
+}
+
+// ══ 20. CHECK DATA QUALITY ══
+function checkDataQuality(raw) {
+    const issues = [];
+    const pidSeen = {};
+    const datesByPid = {};
+
+    raw.forEach(r => {
+        const pid = r.ProductID;
+        if (!pid) { issues.push({ severity:'error', product:'—', date:r.Date||'—', message:'ProductID 欄位缺失' }); return; }
+        if (!r.Date) { issues.push({ severity:'error', product:pid, date:'—', message:'日期欄位缺失' }); return; }
+
+        if (!datesByPid[pid]) datesByPid[pid] = new Set();
+        const dateKey = r.Date;
+        if (datesByPid[pid].has(dateKey)) {
+            issues.push({ severity:'warning', product:pid, date:r.Date, message:'重複日期記錄' });
+        }
+        datesByPid[pid].add(dateKey);
+
+        if ((r.in_qty || 0) < 0) issues.push({ severity:'error', product:pid, date:r.Date, message:'入庫數量為負值 (' + r.in_qty + ')' });
+        if ((r.out_qty || 0) < 0) issues.push({ severity:'error', product:pid, date:r.Date, message:'出庫數量為負值 (' + r.out_qty + ')' });
+        if ((r.current_inventory || 0) < 0) issues.push({ severity:'warning', product:pid, date:r.Date, message:'當日庫存為負值 (' + r.current_inventory + ')' });
+        if ((r.UnitCost || 0) <= 0) issues.push({ severity:'warning', product:pid, date:r.Date, message:'單位成本異常 (' + r.UnitCost + ')' });
+        if ((r.UnitPrice || 0) < (r.UnitCost || 0)) issues.push({ severity:'info', product:pid, date:r.Date, message:'售價低於成本' });
+        if ((r.out_qty || 0) > (r.current_inventory || 0) + (r.in_qty || 0)) {
+            issues.push({ severity:'warning', product:pid, date:r.Date, message:'出庫量超過可用庫存' });
+        }
+        // Extreme outlier: out_qty > 10x average
+        pidSeen[pid] = pidSeen[pid] || [];
+        pidSeen[pid].push(r.out_qty || 0);
+    });
+
+    // Outlier check
+    Object.entries(pidSeen).forEach(([pid, outs]) => {
+        const avg = outs.reduce((s,v)=>s+v,0)/outs.length;
+        const maxOut = Math.max(...outs);
+        if (maxOut > avg * 10 && avg > 0) {
+            issues.push({ severity:'info', product:pid, date:'—', message:'出庫量存在極端離群值 (最大=' + maxOut + ', 均值=' + avg.toFixed(1) + ')' });
+        }
+    });
+
+    return issues;
+}
+
+
+
+// ══ 21. RENDER: REPORT ══
+function renderReport() {
+    generateTextReport();
+    renderSnapshotsList();
+}
+
+function generateTextReport() {
+    const el = document.getElementById('report-text');
+    if (!el || !aggregatedData.products) return;
+
+    const arr = aggregatedData.products;
+    const totalInv = aggregatedData.totalVal || 0;
+    const dsi = aggregatedData._dsi || 0;
+    const health = aggregatedData._health || 0;
+    const gmroi = aggregatedData._gmroi || 0;
+    const turnover = aggregatedData._turnover || 0;
+    const stockouts = aggregatedData._stockouts || 0;
+    const aging90Pct = aggregatedData._aging90Pct || 0;
+    const mKeys = aggregatedData.mKeys || [];
+    const ms = aggregatedData.monthly || {};
+
+    const today = new Date().toISOString().slice(0,10);
+    const abcCounts = {A:0,B:0,C:0};
+    arr.forEach(p => abcCounts[p.abc]++);
+    const totalLoss = arr.reduce((s,p)=>s+p.estimatedLoss, 0);
+    const catTotals = {};
+    arr.forEach(p => { catTotals[p.category] = (catTotals[p.category]||0) + p.totalCurrentValue; });
+    const topCat = Object.entries(catTotals).sort((a,b)=>b[1]-a[1])[0];
+    const highRisk = arr.filter(p=>p.avgAging>90).length;
+    const lastMoGrowth = mKeys.length > 1 ? (ms[mKeys[mKeys.length-1]]?.growth || 0) : 0;
+
+    const report =
+'═══════════════════════════════════════════\n' +
+'       庫存分析智能儀表板 V3.0 週報\n' +
+'       報告日期：' + today + '\n' +
+'═══════════════════════════════════════════\n\n' +
+'【一、庫存概覽】\n' +
+'  庫存總金額：' + (totalInv/10000).toFixed(1) + ' 萬元\n' +
+'  庫存天數(DSI)：' + dsi.toFixed(1) + ' 天 ' + (dsi > 90 ? '⚠ 超標' : '✓ 正常') + '\n' +
+'  存貨周轉率：' + turnover.toFixed(2) + ' 次/年\n' +
+'  庫存健康分：' + health.toFixed(0) + ' / 100 分\n' +
+'  GMROI：' + gmroi.toFixed(2) + ' 倍\n\n' +
+'【二、ABC分類】\n' +
+'  A類品項：' + abcCounts.A + ' 件（高價值，重點管控）\n' +
+'  B類品項：' + abcCounts.B + ' 件（中價值，定期審查）\n' +
+'  C類品項：' + abcCounts.C + ' 件（低價值，批量管理）\n\n' +
+'【三、庫齡風險】\n' +
+'  > 90天庫存佔比：' + aging90Pct.toFixed(1) + '%\n' +
+'  高庫齡品項數：' + highRisk + ' 件\n' +
+'  預估總損失：' + (totalLoss/10000).toFixed(1) + ' 萬元\n\n' +
+'【四、供應鏈狀態】\n' +
+'  缺貨品項數：' + stockouts + ' 件 ' + (stockouts > 5 ? '⚠ 需關注' : '✓ 正常') + '\n' +
+'  最大庫存品類：' + (topCat ? topCat[0] + ' (' + (topCat[1]/10000).toFixed(1) + '萬元)' : '—') + '\n' +
+'  上月COGS環比：' + (lastMoGrowth >= 0 ? '+' : '') + (lastMoGrowth*100).toFixed(1) + '%\n\n' +
+'【五、行動建議】\n' +
+(dsi > 90 ? '  ⚠ DSI超標，建議加強促銷或削減採購\n' : '') +
+(aging90Pct > 15 ? '  ⚠ 高庫齡比例偏高，建議清倉促銷\n' : '') +
+(stockouts > 5 ? '  ⚠ 多個品項缺貨，建議緊急補貨\n' : '') +
+(gmroi < 1 ? '  ⚠ GMROI偏低，建議優化品項結構\n' : '') +
+(health >= 80 ? '  ✓ 整體庫存健康狀況良好\n' : '') +
+'\n' +
+'═══════════════════════════════════════════\n' +
+'   Inventory Strategic OS V3.0 自動生成\n' +
+'═══════════════════════════════════════════';
+
+    el.textContent = report;
+}
+
+function renderSnapshotsList() {
+    const container = document.getElementById('snapshots-list');
+    if (!container) return;
+    snapshots = JSON.parse(localStorage.getItem('v3Snapshots') || '[]');
+    if (snapshots.length === 0) {
+        container.innerHTML = '<div class="text-center py-3 text-slate-500">尚無歷史快照</div>';
+        return;
+    }
+    container.innerHTML = snapshots.slice().reverse().map((s, ri) => {
+        const i = snapshots.length - 1 - ri;
+        return '<div class="flex items-center justify-between p-2 rounded-lg bg-white/5">' +
+            '<div><div class="text-slate-300 text-xs font-medium">' + s.date + '</div>' +
+            '<div class="text-slate-500 text-[0.65rem]">庫存:' + s.inv + '萬 / DSI:' + s.dsi + '天 / 健康:' + s.health + '</div></div>' +
+            '<button onclick="deleteSnapshot(' + i + ')" class="text-red-400 text-xs hover:text-red-300 px-2">刪除</button>' +
+            '</div>';
+    }).join('');
+}
+
+function saveSnapshot() {
+    if (!aggregatedData.products) return;
+    const snap = {
+        date: new Date().toLocaleString('zh-TW'),
+        inv: (aggregatedData.totalVal/10000).toFixed(1),
+        dsi: (aggregatedData._dsi||0).toFixed(1),
+        health: (aggregatedData._health||0).toFixed(0),
+        gmroi: (aggregatedData._gmroi||0).toFixed(2),
+        stockouts: aggregatedData._stockouts || 0,
+        products: aggregatedData.products.length
+    };
+    snapshots.push(snap);
+    localStorage.setItem('v3Snapshots', JSON.stringify(snapshots));
+    renderSnapshotsList();
+    alert('快照已儲存：' + snap.date);
+}
+
+function deleteSnapshot(i) {
+    snapshots.splice(i, 1);
+    localStorage.setItem('v3Snapshots', JSON.stringify(snapshots));
+    renderSnapshotsList();
+}
+
+// ══ 22. RENDER: SETTINGS (static) ══
+function renderSettings() {
+    // Mostly static HTML with accordion, nothing dynamic needed
+}
+
+// ══ 23. EXPORT: PDF ══
+function exportPDF() {
+    const body = document.body;
+    body.classList.add('export-mode');
+    const activeTab = document.querySelector('.tab-content.active');
+    const title = document.querySelector('.glass-btn.active[data-tab]')?.textContent?.trim() || '庫存分析';
+
+    html2canvas(activeTab || document.querySelector('main'), {
+        scale: 1.5,
+        useCORS: true,
+        backgroundColor: document.body.classList.contains('light-mode') ? '#f1f5f9' : '#0f172a',
+        onclone: (cloned) => {
+            cloned.querySelectorAll('.glass-panel').forEach(el => {
+                el.style.backdropFilter = 'none';
+                el.style.webkitBackdropFilter = 'none';
+                el.style.background = document.body.classList.contains('light-mode') ? '#ffffff' : '#1e293b';
+            });
+        }
+    }).then(canvas => {
+        body.classList.remove('export-mode');
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const imgW = 277, imgH = canvas.height / canvas.width * imgW;
+        let y = 0;
+        while (y < imgH) {
+            if (y > 0) pdf.addPage();
+            pdf.addImage(canvas.toDataURL('image/jpeg', 0.85), 'JPEG', 10, 10, imgW, Math.min(190, imgH - y));
+            y += 190;
+        }
+        pdf.save('庫存分析報告_' + new Date().toISOString().slice(0,10) + '.pdf');
+    }).catch(() => {
+        body.classList.remove('export-mode');
+        alert('PDF匯出失敗，請重試');
+    });
+}
+
+// ══ 24. EXPORT: JSON ══
+function exportJSON() {
+    if (!aggregatedData.products) return;
+    const data = {
+        exportDate: new Date().toISOString(),
+        summary: {
+            totalInventoryValue: aggregatedData.totalVal,
+            dsi: aggregatedData._dsi,
+            health: aggregatedData._health,
+            gmroi: aggregatedData._gmroi,
+            stockouts: aggregatedData._stockouts
+        },
+        products: aggregatedData.products,
+        monthly: aggregatedData.monthly,
+        seasonalIndex: aggregatedData.seasonalIndex
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = '庫存分析_' + new Date().toISOString().slice(0,10) + '.json';
+    a.click(); URL.revokeObjectURL(url);
+}
+
+// ══ 25. EXPORT: CSV ══
+function exportCSV() {
+    if (!aggregatedData.products) return;
+    const headers = ['ProductID','名稱','品類','ABC','XYZ','ABCXYZ','現有庫存','庫存金額','庫齡(天)','DSI','GMROI','售磬率','ROP','安全庫存','EOQ','前置時間','單位成本','單位售價'];
+    const rows = aggregatedData.products.map(p => [
+        p.id, p.name, p.category, p.abc, p.xyz, p.abcxyz,
+        p.totalCurrent, p.totalCurrentValue.toFixed(0), p.avgAging.toFixed(1),
+        (p.totalCurrentValue>0 ? (p.totalCurrentValue/aggregatedData.totalCOGS*CFG.DAYS).toFixed(1) : 0),
+        p.gmroi.toFixed(3), (p.str*100).toFixed(1),
+        p.rop.toFixed(0), p.safetyStock.toFixed(0), p.eoq.toFixed(0),
+        p.leadTime, p.unitCost, p.unitPrice
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = '庫存品項分析_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click(); URL.revokeObjectURL(url);
+}
+
+// ══ 26. EXPORT: EXCEL ══
+function exportExcel() {
+    if (!aggregatedData.products || typeof XLSX === 'undefined') {
+        alert('SheetJS 未載入，請確認網路連線');
+        return;
+    }
+    const wb = XLSX.utils.book_new();
+    const arr = aggregatedData.products;
+
+    // Sheet 1: KPIs
+    const kpiData = [
+        ['指標', '數值', '說明'],
+        ['庫存總金額(元)', aggregatedData.totalVal?.toFixed(0), '所有品項現有庫存價值'],
+        ['DSI(天)', aggregatedData._dsi?.toFixed(1), '庫存天數'],
+        ['存貨周轉率(次/年)', aggregatedData._turnover?.toFixed(2), '年周轉次數'],
+        ['庫存健康分', aggregatedData._health?.toFixed(0), '0-100分'],
+        ['GMROI(倍)', aggregatedData._gmroi?.toFixed(2), '毛利庫存投資報酬率'],
+        ['缺貨品項數', aggregatedData._stockouts, '低於ROP的品項'],
+        ['>90天庫齡佔比(%)', aggregatedData._aging90Pct?.toFixed(1), '高風險庫存比例'],
+        ['Fisher季節性指數', aggregatedData.fisherRatio?.toFixed(2), '>6.5表示具季節性']
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(kpiData), 'KPI總覽');
+
+    // Sheet 2: Products
+    const prodHeaders = ['ProductID','名稱','品類','ABC','XYZ','ABCXYZ','現有庫存','庫存金額(元)','庫齡(天)','GMROI','售磬率','前置時間(天)','安全庫存','ROP','EOQ','年需求量','單位成本','單位售價'];
+    const prodRows = arr.map(p => [
+        p.id, p.name, p.category, p.abc, p.xyz, p.abcxyz,
+        p.totalCurrent, Math.round(p.totalCurrentValue), Math.round(p.avgAging),
+        +p.gmroi.toFixed(3), +(p.str*100).toFixed(1),
+        p.leadTime, Math.round(p.safetyStock), Math.round(p.rop), Math.round(p.eoq),
+        Math.round(p.annualDemand), p.unitCost, p.unitPrice
+    ]);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([prodHeaders, ...prodRows]), '品項分析');
+
+    // Sheet 3: ROP
+    const ropHeaders = ['ProductID','名稱','日均需求','前置時間(天)','安全庫存','ROP','現有庫存','狀態'];
+    const ropRows = arr.map(p => [
+        p.id, p.name, +p.dailySalesAvg.toFixed(2), p.leadTime,
+        Math.round(p.safetyStock), Math.round(p.rop), p.totalCurrent,
+        p.totalCurrent < p.rop ? '⚠低於ROP' : '✓正常'
+    ]);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([ropHeaders, ...ropRows]), 'ROP補貨');
+
+    // Sheet 4: Actions
+    const actions = [];
+    arr.forEach(p => {
+        if (p.totalCurrent < p.rop) actions.push(['缺貨', p.id, p.name, '庫存' + p.totalCurrent + '低於ROP ' + Math.round(p.rop)]);
+        if (p.avgAging > 90) actions.push(['高庫齡', p.id, p.name, '平均庫齡' + p.avgAging.toFixed(0) + '天']);
+        if (p.gmroi < 0.5 && p.totalCurrentValue > 10000) actions.push(['低GMROI', p.id, p.name, 'GMROI=' + p.gmroi.toFixed(2)]);
+    });
+    const actHeaders = ['類型','ProductID','名稱','說明'];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([actHeaders, ...actions]), '策略行動');
+
+    XLSX.writeFile(wb, '庫存分析_' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+
+// ══ 27. DARK MODE ══
+function toggleDarkMode() {
+    darkMode = !darkMode;
+    document.body.classList.toggle('light-mode', !darkMode);
+    localStorage.setItem('v3DarkMode', darkMode ? 'true' : 'false');
+    const icon = document.querySelector('#btn-darkmode i[data-lucide]');
+    if (icon) { icon.setAttribute('data-lucide', darkMode ? 'moon' : 'sun'); lucide.createIcons(); }
+    renderedPages.clear();
+    Object.values(myCharts).forEach(c => c.destroy());
+    myCharts = {};
+    renderCurrentTab();
+}
+
+// ══ 28. FILE UPLOAD ══
+function handleFileUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        try {
+            if (typeof XLSX === 'undefined') { alert('SheetJS未載入'); return; }
+            const wb = XLSX.read(evt.target.result, { type: 'array', cellDates: true });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(ws, { defval: 0 });
+            if (!rows || rows.length === 0) { alert('讀取失敗：工作表無資料'); return; }
+
+            // Normalize column names
+            const normalized = rows.map(r => {
+                const norm = {};
+                Object.keys(r).forEach(k => {
+                    const lk = k.trim().toLowerCase().replace(/\s+/g,'_');
+                    norm[lk] = r[k];
+                });
+                return {
+                    ProductID: norm['productid'] || norm['product_id'] || norm['pid'] || norm['品項id'] || norm['品號'] || '—',
+                    ProductName: norm['productname'] || norm['product_name'] || norm['名稱'] || norm['品名'] || norm['productid'] || '未知',
+                    Category: norm['category'] || norm['品類'] || norm['分類'] || '未分類',
+                    Date: norm['date'] ? (norm['date'] instanceof Date ? norm['date'].toISOString().slice(0,10) : String(norm['date']).slice(0,10)) : '—',
+                    in_qty: parseFloat(norm['in_qty'] || norm['入庫'] || norm['in'] || 0),
+                    out_qty: parseFloat(norm['out_qty'] || norm['出庫'] || norm['out'] || 0),
+                    current_inventory: parseFloat(norm['current_inventory'] || norm['庫存'] || norm['inventory'] || 0),
+                    aging: parseFloat(norm['aging'] || norm['庫齡'] || 0),
+                    UnitCost: parseFloat(norm['unitcost'] || norm['unit_cost'] || norm['成本'] || 0),
+                    UnitPrice: parseFloat(norm['unitprice'] || norm['unit_price'] || norm['售價'] || 0),
+                    LeadTime: parseFloat(norm['leadtime'] || norm['lead_time'] || norm['前置時間'] || 14)
+                };
+            });
+
+            const valid = normalized.filter(r => r.ProductID && r.ProductID !== '—' && r.Date && r.Date !== '—');
+            if (valid.length === 0) { alert('格式不符：無法識別必要欄位(ProductID, Date)'); return; }
+            processData(valid);
+            alert('成功載入 ' + valid.length + ' 筆資料，' + [...new Set(valid.map(r=>r.ProductID))].length + ' 個品項');
+        } catch(err) {
+            alert('檔案解析失敗：' + err.message);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+}
+
+// ══ 29. ACCORDION ══
+function toggleAccordion(header) {
+    const body = header.nextElementSibling;
+    const icon = header.querySelector('[data-lucide]');
+    const isOpen = body.classList.contains('open');
+    body.classList.toggle('open', !isOpen);
+    body.style.maxHeight = isOpen ? '0' : body.scrollHeight + 'px';
+    if (icon) { icon.setAttribute('data-lucide', isOpen ? 'chevron-down' : 'chevron-up'); lucide.createIcons(); }
+}
+
+// ══ 30. CLOCK ══
+function updateClock() {
+    const el = document.getElementById('header-clock');
+    if (el) el.textContent = new Date().toLocaleString('zh-TW', { hour12:false, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+// ══ 31. EVENT LISTENERS ══
+document.addEventListener('DOMContentLoaded', () => {
+
+    // Apply dark mode on load
+    if (!darkMode) document.body.classList.add('light-mode');
+
+    // Clock
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Tab navigation
+    document.querySelectorAll('.glass-btn[data-tab]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.glass-btn[data-tab]').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            const tabEl = document.getElementById(btn.dataset.tab);
+            if (tabEl) tabEl.classList.add('active');
+            // Hide filter bar on static Settings/DAX tab
+            const filterBar = document.getElementById('global-filter-bar');
+            if (filterBar) filterBar.style.display = btn.dataset.tab === 'tab-settings' ? 'none' : '';
+            renderCurrentTab();
+        });
+    });
+
+    // Global filter: product search (300ms debounce)
+    document.getElementById('global-search')?.addEventListener('input', e => {
+        globalFilter.search = e.target.value.trim();
+        triggerGlobalFilter();
+    });
+
+    // Dark mode buttons
+    document.getElementById('btn-darkmode')?.addEventListener('click', toggleDarkMode);
+    document.getElementById('btn-darkmode-settings')?.addEventListener('click', toggleDarkMode);
+
+    // File upload
+    document.getElementById('file-upload')?.addEventListener('change', handleFileUpload);
+
+    // Drop zone
+    const dropZone = document.getElementById('drop-zone');
+    if (dropZone) {
+        dropZone.addEventListener('click', () => document.getElementById('file-upload')?.click());
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#6366f1'; });
+        dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = ''; });
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.style.borderColor = '';
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                const fakeEvent = { target: { files: [file], value: '' } };
+                handleFileUpload(fakeEvent);
+            }
+        });
+    }
+
+    // SSR toggle
+    document.getElementById('btn-ssr-long')?.addEventListener('click', () => {
+        ssrMode = 'long';
+        document.getElementById('btn-ssr-long').classList.add('active');
+        document.getElementById('btn-ssr-short').classList.remove('active');
+        renderedPages.delete('tab-trend');
+        renderSSRChart();
+    });
+    document.getElementById('btn-ssr-short')?.addEventListener('click', () => {
+        ssrMode = 'short';
+        document.getElementById('btn-ssr-short').classList.add('active');
+        document.getElementById('btn-ssr-long').classList.remove('active');
+        renderedPages.delete('tab-trend');
+        renderSSRChart();
+    });
+
+    // ABC mode toggle
+    document.getElementById('btn-abc-rel')?.addEventListener('click', () => {
+        abcMode = 'relative';
+        document.getElementById('btn-abc-rel').classList.add('active');
+        document.getElementById('btn-abc-abs').classList.remove('active');
+        renderedPages.delete('tab-structure');
+        renderStructure();
+    });
+    document.getElementById('btn-abc-abs')?.addEventListener('click', () => {
+        abcMode = 'absolute';
+        document.getElementById('btn-abc-abs').classList.add('active');
+        document.getElementById('btn-abc-rel').classList.remove('active');
+        renderedPages.delete('tab-structure');
+        renderStructure();
+    });
+
+    // Service level buttons
+    const svcMap = { 'btn-svc-90': 1.282, 'btn-svc-95': 1.645, 'btn-svc-99': 2.326 };
+    Object.entries(svcMap).forEach(([id, z]) => {
+        document.getElementById(id)?.addEventListener('click', () => {
+            svcLevel = z;
+            Object.keys(svcMap).forEach(bid => document.getElementById(bid)?.classList.remove('active'));
+            document.getElementById(id)?.classList.add('active');
+            if (rawData.length > 0) processData(rawData);
+        });
+    });
+
+    // Loss rate update
+    document.getElementById('btn-update-loss')?.addEventListener('click', () => {
+        if (rawData.length > 0) processData(rawData);
+    });
+
+    // Items filters
+    ['item-search','item-cat-filter','item-abc-filter','item-xyz-filter','item-sort'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', () => { currentPage = 1; applyItemFilters(); });
+    });
+    document.getElementById('item-search')?.addEventListener('input', () => { currentPage = 1; applyItemFilters(); });
+
+    // Pagination
+    document.getElementById('btn-prev-page')?.addEventListener('click', () => {
+        if (currentPage > 1) { currentPage--; renderItemsPage(); }
+    });
+    document.getElementById('btn-next-page')?.addEventListener('click', () => {
+        const total = Math.ceil(filteredItems.length / rowsPerPage);
+        if (currentPage < total) { currentPage++; renderItemsPage(); }
+    });
+    document.getElementById('items-per-page')?.addEventListener('change', () => {
+        rowsPerPage = parseInt(document.getElementById('items-per-page').value);
+        currentPage = 1;
+        renderItemsPage();
+    });
+
+    // CSV export from items tab
+    document.getElementById('btn-export-items-csv')?.addEventListener('click', exportCSV);
+
+    // Threshold update
+    document.getElementById('btn-update-thresholds')?.addEventListener('click', () => {
+        alertCfg.dsiMax = parseFloat(document.getElementById('threshold-dsi')?.value || 90);
+        alertCfg.agingMax = parseFloat(document.getElementById('threshold-aging')?.value || 20);
+        alertCfg.gmroiMin = parseFloat(document.getElementById('threshold-gmroi')?.value || 1.2);
+        alertCfg.imbMax = parseFloat(document.getElementById('threshold-imbalance')?.value || 0.3);
+        renderedPages.delete('tab-actions');
+        renderActions();
+    });
+
+    // What-if sliders
+    const sliderConfig = [
+        { id:'slider-growth', valId:'val-growth', param:'growth', fmt: v => (v>=0?'+':'') + v + '%' },
+        { id:'slider-svc',    valId:'val-svc',    param:'svc',    fmt: v => v + '%' },
+        { id:'slider-hold',   valId:'val-hold',   param:'hold',   fmt: v => v + '%' },
+        { id:'slider-lead',   valId:'val-lead',   param:'lead',   fmt: v => (v>=0?'+':'') + v + '天' }
+    ];
+    sliderConfig.forEach(cfg => {
+        document.getElementById(cfg.id)?.addEventListener('input', e => {
+            const v = parseInt(e.target.value);
+            whatIfParams[cfg.param] = v;
+            const el = document.getElementById(cfg.valId);
+            if (el) el.textContent = cfg.fmt(v);
+            updateWhatIf();
+        });
+    });
+
+    // EOQ calc button
+    document.getElementById('btn-calc-eoq')?.addEventListener('click', () => {
+        CFG.ORDER_COST = parseFloat(document.getElementById('eoq-order-cost')?.value || 500);
+        CFG.HOLDING_RATE = parseFloat(document.getElementById('eoq-holding-rate')?.value || 25) / 100;
+        renderedPages.delete('tab-eoq');
+        renderEOQ();
+    });
+
+    // FIFO product selector
+    document.getElementById('fifo-product-select')?.addEventListener('change', e => {
+        renderFIFOProduct(e.target.value);
+    });
+
+    // Report buttons
+    document.getElementById('btn-pdf')?.addEventListener('click', exportPDF);
+    document.getElementById('btn-excel')?.addEventListener('click', exportExcel);
+    document.getElementById('btn-copy-report')?.addEventListener('click', () => {
+        const txt = document.getElementById('report-text')?.textContent || '';
+        navigator.clipboard?.writeText(txt).then(() => alert('報告已複製到剪貼板')).catch(() => alert('複製失敗，請手動選取'));
+    });
+    document.getElementById('btn-save-snapshot')?.addEventListener('click', saveSnapshot);
+
+    // Settings buttons
+    document.getElementById('btn-load-demo')?.addEventListener('click', generateDemoData);
+    document.getElementById('btn-export-json')?.addEventListener('click', exportJSON);
+    document.getElementById('btn-export-csv')?.addEventListener('click', exportCSV);
+    document.getElementById('btn-reset')?.addEventListener('click', () => {
+        if (confirm('確定要重置所有資料嗎？')) {
+            rawData = []; aggregatedData = {};
+            Object.values(myCharts).forEach(c=>c.destroy()); myCharts = {};
+            renderedPages.clear();
+            document.querySelectorAll('[id^="kpi-"]').forEach(el => el.textContent = '—');
+            generateDemoData();
+        }
+    });
+
+    // Header download
+    document.getElementById('btn-header-download')?.addEventListener('click', exportExcel);
+
+    // Init lucide icons
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    // Auto-load demo data
+    generateDemoData();
+});
+
+</script>
+</body>
+</html>
