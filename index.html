@@ -6481,7 +6481,8 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
       const key = (keyEl || {}).value || '';
       const isCustom = aiState.provider === 'custom';
       const isOllama = aiState.provider === 'ollama';
-      const model = (isCustom || isOllama) ? ((custMdl || {}).value || '') : ((mdlSel || {}).value || '');
+      const isCustomModel = mdlSel && mdlSel.value === '__custom__';
+      const model = (isCustom || isOllama || isCustomModel) ? ((custMdl || {}).value || '') : ((mdlSel || {}).value || '');
       const temp = parseFloat((tempEl || {}).value || '0.3');
       const maxTok = parseInt((tokEl || {}).value || '4096');
       const stream = (strmEl || {}).value !== '0';
@@ -7444,7 +7445,20 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
 
       // 模型選擇記憶
       const mdlSel = document.getElementById('ai-model');
-      if (mdlSel) mdlSel.addEventListener('change', () => { aiState.model = mdlSel.value; });
+      if (mdlSel) mdlSel.addEventListener('change', () => {
+        if (mdlSel.value === '__custom__') {
+          const custRow = document.getElementById('ai-custom-model-row');
+          if (custRow) custRow.style.display = 'flex';
+          const custMdl2 = document.getElementById('ai-custom-model');
+          if (custMdl2) custMdl2.value = '';
+          aiState.model = '';
+        } else {
+          const custRow = document.getElementById('ai-custom-model-row');
+          if (custRow) custRow.style.display = 'none';
+          aiState.model = mdlSel.value;
+        }
+        saveAISettings();
+      });
 
       // 自訂模型名稱（Module B）
       const custMdl = document.getElementById('ai-custom-model');
