@@ -28,3 +28,24 @@ docx_content.txt
 # 系統檔案
 .DS_Store
 Thumbs.db
+
+# V4 建置腳本與除錯目錄
+v4_debug/
+v4_parts/
+assemble_v4_js.py
+reassemble_v4.py
+create_standalone_v1.py
+create_standalone_v2.py
+
+# V4 獨立版本（只保留 index.html）
+Inventory_Strategic_OS_V4.html
+Inventory_Strategic_OS_V3.html
+Inventory_Strategic_OS_Standalone.html
+Inventory_Strategic_OS_V2_Standalone.html
+
+# Excel / CSV 資料（不納入版本控制）
+*.xlsx
+*.csv
+
+# 暫存上傳目錄
+.tmp.driveupload/
