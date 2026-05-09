@@ -3753,15 +3753,15 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
         </div>
         <div class="ai-config-row" style="margin-top:4px">
           <span class="ai-config-label">CORS 代理</span>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="ai-proxy-toggle" onchange="onProxyToggle()"
-              style="width:14px;height:14px;accent-color:#7c3aed;">
-            <span style="font-size:0.72rem;color:#64748b;">本機代理</span>
-          </label>
-          <input type="number" id="ai-proxy-port" value="8765" min="1024" max="65535"
-            title="本機代理 Port"
-            style="width:64px;flex:none;font-size:0.72rem;padding:2px 5px;background:rgba(255,255,255,0.06);border:1px solid rgba(99,102,241,0.2);border-radius:5px;color:#e2e8f0;" placeholder="8765">
-          <span id="ai-proxy-env-hint" style="font-size:0.68rem;color:#64748b;flex:none;white-space:nowrap;"></span>
+          <select id="ai-proxy-mode" onchange="onProxyModeChange()"
+            style="font-size:0.72rem;padding:2px 5px;background:rgba(255,255,255,0.06);border:1px solid rgba(99,102,241,0.2);border-radius:5px;color:#e2e8f0;min-width:110px;">
+            <option value="off">關閉（直連）</option>
+            <option value="local">本機代理（:8080）</option>
+            <option value="custom">自訂代理 URL</option>
+          </select>
+          <input type="text" id="ai-proxy-url" value="" placeholder="https://your-proxy.com/api/proxy"
+            title="自訂代理 URL"
+            style="flex:1;min-width:180px;font-size:0.72rem;padding:2px 5px;background:rgba(255,255,255,0.06);border:1px solid rgba(99,102,241,0.2);border-radius:5px;color:#e2e8f0;display:none;">
         </div>
       </details>
 
@@ -3915,8 +3915,8 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
       temperature: 0.3,
       maxTokens: 4096,
       useStream: true,
-      proxyEnabled: false,
-      proxyPort: 8765,
+      corsProxyMode: 'off',
+      corsProxyUrl: '',
       chatHistory: [],
       isStreaming: false,
       currentTabId: 'tab-overview',
@@ -6324,11 +6324,12 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
       updateModelOptions();
       _fillKeyForProvider(aiState.provider);
       _fillUrlForProvider(aiState.provider);
-      // 恢復 proxy 狀態
-      const proxyCb = document.getElementById('ai-proxy-toggle');
-      if (proxyCb) proxyCb.checked = aiState.proxyEnabled || false;
-      const proxyPt = document.getElementById('ai-proxy-port');
-      if (proxyPt) proxyPt.value = aiState.proxyPort || 8765;
+      // 恢復 CORS proxy 狀態
+      const proxyModeSel = document.getElementById('ai-proxy-mode');
+      if (proxyModeSel) proxyModeSel.value = aiState.corsProxyMode || 'off';
+      const proxyUrlInp = document.getElementById('ai-proxy-url');
+      if (proxyUrlInp) proxyUrlInp.value = aiState.corsProxyUrl || '';
+      onProxyModeChange();
     }
 
     function _toggleCustomRows() {
@@ -6422,19 +6423,13 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
       _refreshUrlResetBtn(aiState.provider);
     }
 
-    function onProxyToggle() {
-      const cb = document.getElementById('ai-proxy-toggle');
-      const portEl = document.getElementById('ai-proxy-port');
-      if (!cb) return;
-      aiState.proxyEnabled = cb.checked;
-      if (portEl) aiState.proxyPort = parseInt(portEl.value) || 8765;
-      const _isRemote = window.location.hostname !== 'localhost'
-                     && window.location.hostname !== '127.0.0.1';
-      const envHint = document.getElementById('ai-proxy-env-hint');
-      if (envHint) {
-        envHint.textContent = _isRemote ? '🌐 Vercel 模式' : '💻 本機模式';
-        envHint.style.color = _isRemote ? '#7ec8e3' : '#64748b';
-      }
+    function onProxyModeChange() {
+      const sel = document.getElementById('ai-proxy-mode');
+      const urlRow = document.getElementById('ai-proxy-url');
+      if (!sel || !urlRow) return;
+      const mode = sel.value;
+      aiState.corsProxyMode = mode;
+      urlRow.style.display = mode === 'custom' ? 'flex' : 'none';
       saveAISettings();
     }
 
@@ -6526,6 +6521,11 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
           delete urlOverrides[aiState.provider];
         }
         aiState.customBaseUrls = urlOverrides;
+        // 從 DOM 讀取最新的代理設定（與 onProxyModeChange 保持同步）
+        const _pmSel = document.getElementById('ai-proxy-mode');
+        const _puInp = document.getElementById('ai-proxy-url');
+        if (_pmSel) aiState.corsProxyMode = _pmSel.value || 'off';
+        if (_puInp) aiState.corsProxyUrl = _puInp.value.trim();
         const settings = {
           provider: aiState.provider,
           model: cfg.model,
@@ -6537,8 +6537,8 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
           temperature: cfg.temp,
           maxTokens: cfg.maxTok,
           useStream: cfg.stream,
-          proxyEnabled: aiState.proxyEnabled,
-          proxyPort: aiState.proxyPort || 8765
+          corsProxyMode: aiState.corsProxyMode || 'off',
+          corsProxyUrl: aiState.corsProxyUrl || ''
         };
         localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(settings));
         _refreshSaveHint();
@@ -6560,8 +6560,8 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
         if (typeof s.temperature === 'number') aiState.temperature = s.temperature;
         if (typeof s.maxTokens === 'number') aiState.maxTokens = s.maxTokens;
         if (typeof s.useStream === 'boolean') aiState.useStream = s.useStream;
-        if (s.proxyEnabled != null) aiState.proxyEnabled = s.proxyEnabled;
-        if (s.proxyPort) aiState.proxyPort = s.proxyPort;
+        if (s.corsProxyMode) aiState.corsProxyMode = s.corsProxyMode;
+        if (s.corsProxyUrl != null) aiState.corsProxyUrl = s.corsProxyUrl;
 
         function applyToUI() {
           const provSel = document.getElementById('ai-provider');
@@ -6586,17 +6586,12 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
           const streamSel = document.getElementById('ai-stream-mode');
           if (streamSel && typeof s.useStream === 'boolean') streamSel.value = s.useStream ? '1' : '0';
           _fillKeyForProvider(aiState.provider);
-          // 還原 proxy
-          const proxyCb = document.getElementById('ai-proxy-toggle');
-          if (proxyCb) proxyCb.checked = aiState.proxyEnabled || false;
-          const proxyPt = document.getElementById('ai-proxy-port');
-          if (proxyPt) proxyPt.value = aiState.proxyPort || 8765;
-          const envHint = document.getElementById('ai-proxy-env-hint');
-          if (envHint) {
-            const _isR = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-            envHint.textContent = _isR ? '🌐 Vercel 模式' : '💻 本機模式';
-            envHint.style.color = _isR ? '#7ec8e3' : '#64748b';
-          }
+          // 還原 CORS proxy 模式
+          const proxyModeSel = document.getElementById('ai-proxy-mode');
+          if (proxyModeSel) proxyModeSel.value = aiState.corsProxyMode || 'off';
+          const proxyUrlInp = document.getElementById('ai-proxy-url');
+          if (proxyUrlInp) proxyUrlInp.value = aiState.corsProxyUrl || '';
+          onProxyModeChange(); // 根據模式顯示/隱藏 URL 輸入框
           _refreshSaveHint();
         }
 
@@ -6651,6 +6646,18 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
       return url;
     }
 
+    // 三模式 CORS 代理包裝：off = 直連 / local = localhost:8080 / custom = 自訂端點
+    function wrapWithProxy(originalUrl) {
+      if (aiState.corsProxyMode === 'local') {
+        return `http://localhost:8080/proxy?url=${encodeURIComponent(originalUrl)}`;
+      }
+      if (aiState.corsProxyMode === 'custom' && aiState.corsProxyUrl) {
+        const base = aiState.corsProxyUrl.replace(/\/$/, '');
+        return `${base}?url=${encodeURIComponent(originalUrl)}`;
+      }
+      return originalUrl;
+    }
+
     async function callAI(messages) {
       const cfg = getAIConfig();
       const _isOllama = aiState.provider === 'ollama';
@@ -6662,14 +6669,7 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
 
       const prov = AI_PROVIDERS[aiState.provider];
       const _realBaseUrl = _normalizeBaseUrl((cfg.customUrl || '') || prov.baseUrl);
-      const _proxyPort = aiState.proxyPort || 8765;
-      const _isRemote = window.location.hostname !== 'localhost'
-                     && window.location.hostname !== '127.0.0.1';
-      const _proxyBase = _isRemote
-        ? 'https://tiny-cell-0a82.jamic710808.workers.dev'
-        : `http://localhost:${_proxyPort}/ar-proxy`;
-      const baseUrl = aiState.proxyEnabled ? _proxyBase : _realBaseUrl;
-      aiState._proxyTargetUrl = aiState.proxyEnabled ? _realBaseUrl : null;
+      const baseUrl = _realBaseUrl; // 代理由 wrapWithProxy() 統一處理
 
       const model = cfg.model || prov.defaultModel || '';
       if (!model) { appendAIError('請選擇或輸入模型名稱'); return null; }
@@ -6724,12 +6724,13 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
         bodyObj.reasoning_split = true;
       }
 
-      const resp = await fetch(fetchUrl, {
+      const reqHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${cfg.key}`
+      };
+      const resp = await fetch(wrapWithProxy(`${baseUrl}/chat/completions`), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${cfg.key}`
-        },
+        headers: reqHeaders,
         body: JSON.stringify(bodyObj),
         signal: aiState.abortController.signal
       });
@@ -6817,13 +6818,14 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
       };
       if (systemContent) body.system = systemContent;
 
-      const resp = await fetch(`${baseUrl}/messages`, {
+      const anthroHeaders = {
+        'Content-Type': 'application/json',
+        'x-api-key': cfg.key,
+        'anthropic-version': '2023-06-01'
+      };
+      const resp = await fetch(wrapWithProxy(`${baseUrl}/messages`), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': cfg.key,
-          'anthropic-version': '2023-06-01'
-        },
+        headers: anthroHeaders,
         body: JSON.stringify(body),
         signal: aiState.abortController.signal
       });

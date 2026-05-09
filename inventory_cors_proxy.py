@@ -36,10 +36,13 @@ class InventoryServerHandler(BaseHTTPRequestHandler):
                          'anthropic-version, HTTP-Referer, X-Title, X-Proxy-Target')
 
     def do_OPTIONS(self):
-        self.send_response(200)
-        self._cors()
-        self.send_header('Content-Length', '0')
-        self.end_headers()
+        if self.path.startswith(PROXY_PATH):
+            self._proxy('OPTIONS')
+        else:
+            self.send_response(200)
+            self._cors()
+            self.send_header('Content-Length', '0')
+            self.end_headers()
 
     def do_GET(self):
         if self.path.startswith(PROXY_PATH):
@@ -130,8 +133,8 @@ table{{border-collapse:collapse;width:100%}}td{{padding:7px 14px;border-bottom:1
         fwd_headers['Host'] = parsed.netloc
 
         auth_val = fwd_headers.get('Authorization') or fwd_headers.get('authorization', '')
-        print(f'  [PROXY] → {target_url}')
-        print(f'  [AUTH ] {"✅ Bearer …" + auth_val[-6:] if auth_val else "❌ 缺少 Authorization header"}')
+        print('  [PROXY] -> ' + target_url)
+        print('  [AUTH ] ' + ('OK Bearer ...' + auth_val[-6:] if auth_val else 'MISSING Authorization header'))
 
         ctx = ssl.create_default_context()
         req = urllib.request.Request(target_url, data=body, method=method)
@@ -180,13 +183,13 @@ table{{border-collapse:collapse;width:100%}}td{{padding:7px 14px;border-bottom:1
 
 if __name__ == '__main__':
     print('=' * 60)
-    print(f'  Inventory Strategic OS — 本機伺服器')
-    print(f'  服務目錄：{SERVE_DIR}')
+    print('  Inventory Strategic OS - Local Server')
+    print('  Serve Dir: ' + SERVE_DIR)
     print()
-    print(f'  瀏覽器開啟：http://localhost:{PORT}')
+    print('  Open: http://localhost:' + str(PORT))
     print()
-    print(f'  ✅ 端點 URL 照填原本的 https://api.xxx.com/v1')
-    print(f'     面板「進階設定 → CORS 代理」開關，系統自動轉發')
+    print('  Fill endpoint URL as-is (e.g. https://api.xxx.com/v1)')
+    print('     Enable "CORS Proxy" in dashboard settings, system handles rest')
     print('=' * 60)
     server = HTTPServer(('', PORT), InventoryServerHandler)
     try:
