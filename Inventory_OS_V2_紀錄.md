@@ -79,3 +79,67 @@ V2.0 的內建範例資料生成器增加了季節性波動模擬（使用正弦
 
 ## 開發日期
 2026 年 3 月 4 日
+
+---
+
+## 離線Standalone版本轉換紀錄 (2026-03-19)
+
+### 問題背景
+使用者在無網路連線的環境下需要使用本儀表板，但原始版本依賴多個外部 CDN：
+- Tailwind CSS CDN
+- Chart.js CDN
+- SheetJS CDN
+- Lucide Icons CDN
+
+當 CDN 無法訪問時，圖表無法正常顯示。
+
+### 解決方案
+編寫 Python 轉換腳本 `create_standalone_v2.py`，將所有外部依賴內嵌到單一 HTML 檔案中。
+
+### 轉換程序
+
+1. **內嵌 Chart.js 與 SheetJS**
+   - 從 `chartjs.txt` 與 `sheetjs.txt` 讀取已下載的庫檔案
+   - 移除 CDN 引用標籤
+   - 在 `</head>` 前插入內嵌的 `<script>` 標籤
+
+2. **Lucide 圖示替代方案**
+   - 建立 Lucide icon 到 emoji 的對照表（比 V1 多 `truck` 與 `scale`）
+   - 將所有 `data-lucide="icon-name"` 屬性替換為 `title="icon-name"`
+   - 將 `<i data-lucide="icon-name"></i>` 替換為 `<span>emoji</span>`
+
+3. **Tailwind CSS 等效樣式**
+   - 將所有使用的 Tailwind 實用類別轉換為純 CSS
+   - 建立完整的 CSS 樣式表（與 V1 相同的架構）
+
+4. **Lucide Stub 問題修復**
+   - 移除 Lucide CDN 後，程式碼仍呼叫 `lucide.createIcons()`
+   - 拋出 `ReferenceError: lucide is not defined`
+   - 在第一次呼叫前加入 Stub：
+     ```javascript
+     if (typeof lucide === 'undefined') { var lucide = { createIcons: function() {} }; }
+     ```
+
+### 產出檔案
+- `Inventory_Strategic_OS_V2_Standalone.html` (約 975KB)
+- 包含內嵌的 Chart.js (約 205KB) 與 SheetJS (約 709KB)
+
+### 轉換腳本
+```python
+# create_standalone_v2.py 主要功能
+- 讀取 chartjs.txt, sheetjs.txt, Inventory_Strategic_OS_V2.html
+- 移除 CDN 引用
+- 內嵌 JavaScript 庫
+- 替換 Lucide 圖示為 emoji
+- 添加 Tailwind 等效 CSS
+- 輸出 _V2_Standalone.html
+```
+
+### 與 V1 的差異
+- V2 的 Emoji 對照表多包含 `truck` (🚚) 與 `scale` (⚖️)
+- V2 的 HTML 結構稍有不同，lucide.createIcons() 位置略有差異
+
+### 技術要點
+- `@media` 規則必須放在 CSS 根層級，不能巢狀在選擇器內
+- `lucide.createIcons()` 呼叫需使用 `typeof lucide !== 'undefined'` 條件檢查
+- Emoji 替代方案兼顧美觀與效能

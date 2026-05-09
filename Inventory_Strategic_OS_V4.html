@@ -3782,6 +3782,12 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
     <!-- 輸入區 -->
     <div class="ai-input-section">
       <div class="ai-context-tag">📍 當前頁籤：<span id="ai-context-label">—</span></div>
+      <div style="padding:4px 8px 2px;font-size:0.7rem;color:#94a3b8">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none">
+          <input type="checkbox" id="ai-attach-shot" style="accent-color:#a78bfa;cursor:pointer">
+          <span>📸 附加當前頁籤截圖（需 Vision 模型）</span>
+        </label>
+      </div>
       <div class="ai-input-wrap">
         <textarea id="ai-input" rows="2" placeholder="輸入問題，Enter 換行，Ctrl+Enter 送出…"></textarea>
         <button class="ai-send-btn" id="ai-send-btn" onclick="sendAIMessage()">發送</button>
@@ -3845,28 +3851,32 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
         baseUrl: 'https://api.openai.com/v1',
         models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1-mini', 'o3-mini'],
         defaultModel: 'gpt-4o',
-        apiFormat: 'openai'
+        apiFormat: 'openai',
+        visionModels: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo']
       },
       anthropic: {
         name: 'Anthropic',
         baseUrl: 'https://api.anthropic.com/v1',
         models: ['claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
         defaultModel: 'claude-sonnet-4-6',
-        apiFormat: 'anthropic'
+        apiFormat: 'anthropic',
+        visionModels: ['claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001']
       },
       deepseek: {
         name: 'DeepSeek',
         baseUrl: 'https://api.deepseek.com/v1',
         models: ['deepseek-chat', 'deepseek-reasoner'],
         defaultModel: 'deepseek-chat',
-        apiFormat: 'openai'
+        apiFormat: 'openai',
+        visionModels: []
       },
       minimax: {
         name: 'MiniMax',
         baseUrl: 'https://api.minimaxi.com/v1',
         models: ['MiniMax-M2.7', 'MiniMax-M2.7-highspeed', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-M2.1', 'MiniMax-M2.1-highspeed', 'MiniMax-M2'],
         defaultModel: 'MiniMax-M2.7',
-        apiFormat: 'openai'
+        apiFormat: 'openai',
+        visionModels: ['MiniMax-M2.7', 'MiniMax-M2.5', 'MiniMax-M2.1']
       },
       siliconflow: {
         name: '硅基流動',
@@ -3879,28 +3889,32 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
           'Qwen/Qwen2.5-7B-Instruct'
         ],
         defaultModel: 'Qwen/Qwen2.5-72B-Instruct',
-        apiFormat: 'openai'
+        apiFormat: 'openai',
+        visionModels: []
       },
       openrouter: {
         name: 'OpenRouter',
         baseUrl: 'https://openrouter.ai/api/v1',
         models: ['anthropic/claude-sonnet-4-6', 'openai/gpt-4o', 'deepseek/deepseek-chat', 'google/gemini-2.5-flash', 'meta-llama/llama-3.3-70b-instruct'],
         defaultModel: 'deepseek/deepseek-chat',
-        apiFormat: 'openai'
+        apiFormat: 'openai',
+        visionModels: ['anthropic/claude-sonnet-4-6', 'openai/gpt-4o', 'google/gemini-2.5-flash']
       },
       ollama: {
         name: 'Ollama（本地）',
         baseUrl: 'http://localhost:11434/v1',
         models: [],
         defaultModel: '',
-        apiFormat: 'openai'
+        apiFormat: 'openai',
+        visionModels: []
       },
       custom: {
         name: '自訂端點',
         baseUrl: '',
         models: [],
         defaultModel: '',
-        apiFormat: 'openai'
+        apiFormat: 'openai',
+        visionModels: []
       }
     };
 
@@ -6647,12 +6661,17 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
     }
 
     // 三模式 CORS 代理包裝：off = 直連 / local = localhost:8080 / custom = 自訂端點
+    // 每次呼叫時直接從 DOM 讀取，避免使用者輸入後未儲存導致 aiState 過期
     function wrapWithProxy(originalUrl) {
-      if (aiState.corsProxyMode === 'local') {
+      const modeSel = document.getElementById('ai-proxy-mode');
+      const urlInp  = document.getElementById('ai-proxy-url');
+      const mode     = (modeSel?.value || '').trim() || aiState.corsProxyMode || 'off';
+      const proxyUrl = (urlInp?.value  || '').trim() || aiState.corsProxyUrl  || '';
+      if (mode === 'local') {
         return `http://localhost:8080/proxy?url=${encodeURIComponent(originalUrl)}`;
       }
-      if (aiState.corsProxyMode === 'custom' && aiState.corsProxyUrl) {
-        const base = aiState.corsProxyUrl.replace(/\/$/, '');
+      if (mode === 'custom' && proxyUrl) {
+        const base = proxyUrl.replace(/\/$/, '');
         return `${base}?url=${encodeURIComponent(originalUrl)}`;
       }
       return originalUrl;
@@ -6961,6 +6980,60 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
 
     // ══ P5-7. 發送訊息 ══
 
+    // 截圖當前 tab（使用 html2canvas）
+    async function captureCurrentTab() {
+      if (typeof html2canvas === 'undefined') {
+        appendAIError('html2canvas 載入失敗，無法截圖');
+        return null;
+      }
+      const activeTab = document.querySelector('.tab-content.active');
+      if (!activeTab) return null;
+      try {
+        const canvas = await html2canvas(activeTab, {
+          scale: 0.8,
+          useCORS: true,
+          logging: false,
+          backgroundColor: document.body.classList.contains('light-mode') ? '#FAF8F5' : '#0f172a'
+        });
+        return canvas.toDataURL('image/png');
+      } catch (e) {
+        console.error('截圖失敗:', e);
+        return null;
+      }
+    }
+
+    // 取得截圖 base64（含 vision 支援判斷）
+    async function _maybeAttachScreenshot() {
+      const checkbox = document.getElementById('ai-attach-shot');
+      if (!checkbox?.checked) return null;
+      const prov = AI_PROVIDERS[aiState.provider] || {};
+      const curModel = aiState.model || '';
+      const visionList = prov.visionModels || [];
+      if (visionList.length > 0 && !visionList.includes(curModel)) {
+        appendAIError('⚠️ 當前模型不支援 Vision，已忽略截圖');
+        return null;
+      }
+      return await captureCurrentTab();
+    }
+
+    // 將截圖注入到 messages 最後一條 user 訊息（OpenAI multimodal 格式）
+    function _injectImageToMessages(messages, imgB64) {
+      if (!imgB64) return messages;
+      return messages.map((m, i) => {
+        if (i === messages.length - 1 && m.role === 'user') {
+          const textContent = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+          return {
+            role: 'user',
+            content: [
+              { type: 'text', text: textContent },
+              { type: 'image_url', image_url: { url: imgB64 } }
+            ]
+          };
+        }
+        return m;
+      });
+    }
+
     async function sendAIMessage() {
       if (aiState.isStreaming) {
         if (aiState.abortController) aiState.abortController.abort();
@@ -6982,11 +7055,14 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
       const ctxData = extractTabData(aiState.currentTabId);
       const ctxStr = formatContextForPrompt(ctxData);
 
-      const messages = [
+      let messages = [
         { role: 'system', content: AI_SYSTEM_PROMPT },
         { role: 'system', content: '【當前頁籤數據摘要】\n' + ctxStr },
         ...aiState.chatHistory.slice(-14)
       ];
+
+      const imgB64 = await _maybeAttachScreenshot();
+      messages = _injectImageToMessages(messages, imgB64);
 
       await callAI(messages);
     }
@@ -7034,12 +7110,15 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
       appendAIMessage(userMsg, 'user', false);
       aiState.chatHistory = [{ role: 'user', content: userMsg }];
 
-      const messages = [
+      let messages = [
         { role: 'system', content: AI_SYSTEM_PROMPT },
         { role: 'system', content: '【頁籤數據摘要】\n' + ctxStr },
         { role: 'user', content: userMsg }
       ];
       updateTokenHint(messages);
+
+      const imgB64 = await _maybeAttachScreenshot();
+      messages = _injectImageToMessages(messages, imgB64);
 
       const sendBtn = document.getElementById('ai-send-btn');
       if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = '⏹ 停止'; }

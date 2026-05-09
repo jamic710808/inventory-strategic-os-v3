@@ -35,6 +35,34 @@ Excel 或 CSV 檔案需包含以下欄位：
 
 ---
 
+## 離線Standalone版本
+
+本儀表板提供**離線Standalone版本**，可在無網路連線的環境下使用。
+
+### 檔案
+- `Inventory_Strategic_OS_V2_Standalone.html` - 離線版本（所有依賴已內嵌）
+
+### 與原版差異
+| 項目 | 原版 | Standalone 版 |
+|------|------|---------------|
+| 圖示 | Lucide Icons (CDN) | Emoji 替代 |
+| 圖表庫 | Chart.js (CDN) | 內嵌約 205KB |
+| 資料庫 | SheetJS (CDN) | 內嵌約 709KB |
+| 樣式 | TailwindCSS CDN | 純 CSS內嵌 |
+| 檔案大小 | ~51KB | ~975KB |
+
+### 使用方式
+1. 雙擊開啟 `Inventory_Strategic_OS_V2_Standalone.html`
+2. 其餘操作與原版相同
+
+### 建構方式
+如需重新產生 Standalone 版本，執行：
+```bash
+python create_standalone_v2.py
+```
+
+---
+
 ## 九大分頁功能指南
 
 ### 1. 總覽儀表板
