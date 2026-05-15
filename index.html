@@ -1405,10 +1405,84 @@
 
     /* 設定區 */
     .ai-config-section {
-      padding: 12px 16px;
       border-bottom: 1px solid rgba(99, 102, 241, 0.1);
       font-size: 0.78rem;
       flex-shrink: 0;
+    }
+
+    .ai-config-toggle-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      cursor: pointer;
+      user-select: none;
+      color: #94a3b8;
+      font-size: 0.72rem;
+      gap: 6px;
+    }
+
+    .ai-config-toggle-bar:hover { background: rgba(99,102,241,0.06); }
+
+    .ai-config-toggle-bar .toggle-label { flex: 1; letter-spacing: 0.02em; }
+
+    .ai-config-toggle-icon {
+      font-size: 0.65rem;
+      transition: transform 0.2s;
+    }
+
+    .ai-config-section.collapsed .ai-config-toggle-icon { transform: rotate(-90deg); }
+
+    .ai-config-body {
+      padding: 8px 16px 12px;
+      overflow: hidden;
+      max-height: 600px;
+      transition: max-height 0.25s ease, padding 0.25s ease, opacity 0.2s;
+      opacity: 1;
+    }
+
+    .ai-config-section.collapsed .ai-config-body {
+      max-height: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      opacity: 0;
+    }
+
+    /* Quick Reply 建議列 */
+    .quick-reply-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 12px 4px;
+    }
+
+    .quick-reply-chip {
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(124, 58, 237, 0.35);
+      background: rgba(124, 58, 237, 0.08);
+      color: #a78bfa;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+      line-height: 1.4;
+    }
+
+    .quick-reply-chip:hover {
+      background: rgba(124, 58, 237, 0.2);
+      border-color: rgba(124, 58, 237, 0.6);
+      color: #c4b5fd;
+    }
+
+    body.light-mode .quick-reply-chip {
+      border-color: rgba(109, 40, 217, 0.3);
+      background: rgba(109, 40, 217, 0.06);
+      color: #7c3aed;
+    }
+
+    body.light-mode .quick-reply-chip:hover {
+      background: rgba(109, 40, 217, 0.14);
     }
 
     .ai-config-row {
@@ -3666,7 +3740,13 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
     </div>
 
     <!-- 供應商 / 模型 / API Key 設定區 -->
-    <div class="ai-config-section">
+    <div class="ai-config-section collapsed" id="ai-config-section">
+      <div class="ai-config-toggle-bar" onclick="toggleAIConfig()" title="展開/折疊設定">
+        <span class="ai-config-toggle-icon">▼</span>
+        <span class="toggle-label">AI 設定</span>
+        <span id="ai-config-summary" style="font-size:0.68rem;color:#6366f1;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+      </div>
+      <div class="ai-config-body">
 
       <!-- 供應商 -->
       <div class="ai-config-row">
@@ -3755,6 +3835,7 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
           <span class="ai-config-label">CORS 代理</span>
           <select id="ai-proxy-mode" onchange="onProxyModeChange()"
             style="font-size:0.72rem;padding:2px 5px;background:rgba(255,255,255,0.06);border:1px solid rgba(99,102,241,0.2);border-radius:5px;color:#e2e8f0;min-width:110px;">
+            <option value="vercel" selected>Vercel 代理（本站 /api/proxy）</option>
             <option value="off">關閉（直連）</option>
             <option value="local">本機代理（:8080）</option>
             <option value="custom">自訂代理 URL</option>
@@ -3766,7 +3847,8 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
       </details>
 
       <div class="ai-token-hint" id="ai-token-hint"></div>
-    </div>
+      </div><!-- /.ai-config-body -->
+    </div><!-- /.ai-config-section -->
 
     <!-- 對話訊息區 -->
     <div id="ai-messages" class="ai-messages">
@@ -6538,7 +6620,7 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
         // 從 DOM 讀取最新的代理設定（與 onProxyModeChange 保持同步）
         const _pmSel = document.getElementById('ai-proxy-mode');
         const _puInp = document.getElementById('ai-proxy-url');
-        if (_pmSel) aiState.corsProxyMode = _pmSel.value || 'off';
+        if (_pmSel) aiState.corsProxyMode = _pmSel.value || 'vercel';
         if (_puInp) aiState.corsProxyUrl = _puInp.value.trim();
         const settings = {
           provider: aiState.provider,
@@ -6551,12 +6633,25 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
           temperature: cfg.temp,
           maxTokens: cfg.maxTok,
           useStream: cfg.stream,
-          corsProxyMode: aiState.corsProxyMode || 'off',
+          corsProxyMode: aiState.corsProxyMode || 'vercel',
           corsProxyUrl: aiState.corsProxyUrl || ''
         };
         localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(settings));
         _refreshSaveHint();
+        _updateAIConfigSummary();
       } catch (e) { console.warn('AI 設定儲存失敗:', e); }
+    }
+
+    function _updateAIConfigSummary() {
+      const el = document.getElementById('ai-config-summary');
+      if (!el) return;
+      const prov = aiState.provider || '';
+      const model = (document.getElementById('ai-model')?.value ||
+                     document.getElementById('ai-custom-model')?.value || '').split('/').pop();
+      const provLabel = { openai:'OpenAI', anthropic:'Anthropic', deepseek:'DeepSeek',
+        siliconflow:'硅基', minimax:'MiniMax', openrouter:'OpenRouter',
+        ollama:'Ollama', custom:'自訂' }[prov] || prov;
+      el.textContent = model ? `${provLabel} · ${model}` : provLabel;
     }
 
     function loadAISettings() {
@@ -6602,11 +6697,12 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
           _fillKeyForProvider(aiState.provider);
           // 還原 CORS proxy 模式
           const proxyModeSel = document.getElementById('ai-proxy-mode');
-          if (proxyModeSel) proxyModeSel.value = aiState.corsProxyMode || 'off';
+          if (proxyModeSel) proxyModeSel.value = aiState.corsProxyMode || 'vercel';
           const proxyUrlInp = document.getElementById('ai-proxy-url');
           if (proxyUrlInp) proxyUrlInp.value = aiState.corsProxyUrl || '';
           onProxyModeChange(); // 根據模式顯示/隱藏 URL 輸入框
           _refreshSaveHint();
+          _updateAIConfigSummary();
         }
 
         if (document.readyState === 'complete' || document.readyState === 'interactive') applyToUI();
@@ -6660,13 +6756,16 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
       return url;
     }
 
-    // 三模式 CORS 代理包裝：off = 直連 / local = localhost:8080 / custom = 自訂端點
+    // 四模式 CORS 代理包裝：vercel = 本站 /api/proxy / off = 直連 / local = localhost:8080 / custom = 自訂端點
     // 每次呼叫時直接從 DOM 讀取，避免使用者輸入後未儲存導致 aiState 過期
     function wrapWithProxy(originalUrl) {
       const modeSel = document.getElementById('ai-proxy-mode');
       const urlInp  = document.getElementById('ai-proxy-url');
-      const mode     = (modeSel?.value || '').trim() || aiState.corsProxyMode || 'off';
+      const mode     = (modeSel?.value || '').trim() || aiState.corsProxyMode || 'vercel';
       const proxyUrl = (urlInp?.value  || '').trim() || aiState.corsProxyUrl  || '';
+      if (mode === 'vercel') {
+        return `/api/proxy?url=${encodeURIComponent(originalUrl)}`;
+      }
       if (mode === 'local') {
         return `http://localhost:8080/proxy?url=${encodeURIComponent(originalUrl)}`;
       }
@@ -6675,6 +6774,55 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
         return `${base}?url=${encodeURIComponent(originalUrl)}`;
       }
       return originalUrl;
+    }
+
+    // AI 設定面板折疊切換
+    function toggleAIConfig() {
+      const sec = document.getElementById('ai-config-section');
+      if (!sec) return;
+      sec.classList.toggle('collapsed');
+    }
+
+    // Quick Reply 建議對應表（各頁籤 3 個追問）
+    const QUICK_REPLIES = {
+      'tab-overview':  ['📌 哪個品項最需要立即處理？', '💰 估計優化後可釋放多少資金？', '📅 建議的執行時間表是？'],
+      'tab-trend':     ['📉 周轉率下滑的根本原因是？', '🔄 哪個月份需要重點追查？', '📈 預計何時可回到正常水位？'],
+      'tab-structure': ['⚠️ C 類品項中有哪些可以淘汰？', '🎯 AX 品項的安全庫存設定合理嗎？', '🔁 如何調整訂購策略降低 CZ 品項風險？'],
+      'tab-aging':     ['💸 逾期庫存的變現方案有哪些？', '🏷️ 哪些品項優先促銷出清？', '📝 如何防止新批次再次老化？'],
+      'tab-forecast':  ['📐 MAPE 偏高的主要來源是？', '🔧 季節係數需要調整哪些月份？', '🤖 有哪些模型改善方向可以嘗試？'],
+      'tab-supply':    ['🚨 缺貨風險最高的品項是哪些？', '📦 過剩庫存如何消化？', '⏱️ 補貨提前期需要調整嗎？'],
+      'tab-items':     ['🔍 異常品項的共同特徵是？', '📊 如何設定這批品項的補貨觸發點？', '🗂️ 建議的分類調整是？'],
+      'tab-actions':   ['⚡ 本週應該優先執行哪 3 件事？', '👥 各行動項目的負責單位建議？', '📋 如何追蹤執行進度？'],
+      'tab-whatif':    ['🎯 哪個參數組合 ROI 最高？', '📉 最保守情境下的損益影響？', '🔑 關鍵假設如果改變結果會如何？'],
+      'tab-eoq':       ['⚖️ 實際訂購量偏離 EOQ 多少？', '💡 如何說服採購團隊接受 EOQ 建議？', '📆 實施後多久可以看到成本節省？'],
+      'tab-fifo':      ['🕐 哪些批次需要在本月優先出貨？', '⚠️ 老舊批次的報廢風險有多高？', '🔄 FIFO 執行的主要障礙是？'],
+      'tab-quality':   ['🛠️ 資料缺失率最高的欄位是？', '📏 異常偵測的閾值設定合理嗎？', '🔄 資料治理改善計劃從哪裡開始？'],
+      'tab-report':    ['📊 本週報告的核心指標有改善嗎？', '🎯 管理層最關注的 3 個問題是？', '📌 下週需要重點監控什麼？'],
+    };
+
+    function appendQuickReplies(tabId) {
+      const container = document.getElementById('ai-messages');
+      if (!container) return;
+      // 移除舊的 quick reply bar（避免重複累積）
+      container.querySelectorAll('.quick-reply-bar').forEach(el => el.remove());
+      const chips = QUICK_REPLIES[tabId];
+      if (!chips || chips.length === 0) return;
+      const bar = document.createElement('div');
+      bar.className = 'quick-reply-bar';
+      chips.forEach(text => {
+        const btn = document.createElement('button');
+        btn.className = 'quick-reply-chip';
+        btn.textContent = text;
+        btn.onclick = () => {
+          bar.remove();
+          const inp = document.getElementById('ai-input');
+          if (inp) { inp.value = text; inp.focus(); }
+          sendAIMessage();
+        };
+        bar.appendChild(btn);
+      });
+      container.appendChild(bar);
+      container.scrollTop = container.scrollHeight;
     }
 
     async function callAI(messages) {
@@ -6711,6 +6859,8 @@ RETURN base * si                      -- 乘以季節指數調整</pre>
           aiState.chatHistory.push({ role: 'assistant', content: fullText });
           trimChatHistory();
           saveAIChatCache();
+          // 每次 AI 回答後顯示當前頁籤的 Quick Reply 建議
+          appendQuickReplies(aiState.currentTabId);
         }
         setAIStatus('ready');
         return fullText;
